@@ -6,7 +6,11 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\RegisterController;
 use App\Http\Controllers\API\TaskController;
 use App\Http\Controllers\API\GooglecodeController;
+use App\Http\Controllers\API\UnitController;
+use App\Http\Controllers\API\ProxyController;
 use App\Http\Controllers\API\CookieUpload;
+use App\Http\Controllers\API\AccountController;
+use App\Http\Controllers\API\TestController;
 
 // Route::get('/user', function (Request $request) {
 //     return $request->user();
@@ -25,10 +29,25 @@ Route::controller(TaskController::class)->group(function () {
     Route::resource('tasks', TaskController::class);
 });
 
+Route::controller(AccountController::class)->group(function () {
+    Route::resource('accounts', AccountController::class);
+});
+
 Route::controller(GooglecodeController::class)->group(function () {
     Route::resource('codes', GooglecodeController::class);
+});
+
+Route::controller(UnitController::class)->group(function () {
+    Route::resource('units', UnitController::class);
+});
+
+Route::controller(ProxyController::class)->group(function () {
+    Route::resource('proxies', ProxyController::class);
 });
 
 Route::post('/cookies/{unit_id}/{task_id}', [CookieUpload::class, 'fileUpload'])->name('fileUpload');
 Route::get('/cookies/{unit_id}/{task_id}', [CookieUpload::class, 'fileDownload'])->name('fileDownload');
 // Route::delete('/cookies/{unit_id}/{task_id}', [CookieUpload::class, 'fileDelete'])->name('fileDelete');
+
+Route::get('/test', [TestController::class, 'index']);
+Route::delete('orders/{order_id}', [TaskController::class, 'destoryByOrderId']);

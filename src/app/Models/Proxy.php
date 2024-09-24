@@ -22,6 +22,11 @@ class Proxy extends Model
      * @var array
      */
     protected $fillable = [
-        'server', 'port', 'login', 'password'
+        'type',
+        'server',
+        'port',
+        'login',
+        'password',
+        'country'
     ];
 }

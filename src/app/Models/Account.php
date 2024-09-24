@@ -15,6 +15,10 @@ class Account extends Model
      * @var array
      */
     protected $fillable = [
-        'email', 'password'
+        'type',
+        'email',
+        'password',
+        'country',
+        'backup_email',
     ];
 }

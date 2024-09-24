@@ -6,7 +6,7 @@ COPY .bashrc /root/
 
 # mix
 RUN apt-get update \
-  && apt-get install -y build-essential zlib1g-dev default-mysql-client curl gnupg procps vim nano git unzip libzip-dev libpq-dev \
+  && apt-get install -y build-essential zlib1g-dev default-mysql-client curl gnupg procps nano git unzip libzip-dev libpq-dev cron wget \
   && docker-php-ext-install zip pdo_mysql pdo_pgsql pgsql
 
 # intl
@@ -51,12 +51,21 @@ RUN composer global require "laravel/installer"
 WORKDIR /root
 RUN git clone https://github.com/seebi/dircolors-solarized
 
+RUN mkdir -p /home/dregore
+
+RUN echo "* * * * * cd /var/www/html && /usr/local/bin/php artisan schedule:run >> /dev/null 2>&1" >> /etc/cron.d/crontab
+# RUN echo "* * * * * echo \"USERNAME_DATA='SUPERADMIN'\" >> /var/www/html/cron.log"  >> /etc/cron.d/crontab
+RUN crontab /etc/cron.d/crontab
+RUN touch /var/www/html/cron.log
+
 # EXPOSE 5173
 WORKDIR /var/www/html
 
 RUN groupadd -g 1000 dregore
 RUN useradd -u 1000 -g dregore dregore
 COPY --chown=www-data:www-data . /var/www
-USER dregore
+# USER dregore
 
 EXPOSE 9000
+
+CMD bash -c "cron && php-fpm"

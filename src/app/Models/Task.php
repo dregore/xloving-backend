@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Task extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     // protected $primaryKey = 'unit_id';
 
@@ -17,6 +18,39 @@ class Task extends Model
      * @var array
      */
     protected $fillable = [
-        'unit_id', 'status', 'type', 'attempts', 'delay_min', 'delay_max', 'search_term', 'search_field', 'search_scroll', 'install_button', 'delete', 'app_name', 'app_bundle', 'minutes', 'seconds', 'url'
+        'status',
+        'unit_id',
+        'type',
+        'attempts',
+        'attempts_changes',
+        'bundles',
+        'delay_min',
+        'delay_max',
+        'search_term',
+        'app_name',
+        'app_bundle',
+        'search_field',
+        'search_scroll',
+        'install_button',
+        'delete',
+        'url',
+        'minutes',
+        'seconds',
+        'like',
+        'backup_email_button',
+        'backup_code_button',
+        'another_method_button',
+        'order_id',
+        'retention',
+        'country',
+        'fill_type',
+        'open_time',
+        'share',
+        'skip_button',
+        'like_button',
+        'confirm_button',
+        'account_id',
+        'ok_button',
+        'deeplink_page'
     ];
 }

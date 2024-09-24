@@ -1,0 +1,195 @@
+<?php
+
+namespace App\Http\Controllers\API;
+
+use App\Models\Unit;
+use App\Http\Resources\UnitResource;
+
+use App\Models\Account;
+
+use App\Models\Task;
+
+use Illuminate\Http\Request;
+use App\Http\Controllers\API\BaseController as BaseController;
+use Illuminate\Http\JsonResponse;
+
+use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\Builder;
+
+class TestController extends BaseController
+{
+    /**
+     * Display a listing of the resource.
+     */
+    public function index()
+    {
+        echo '<pre>';
+
+        // 2. Получаем все юниты, чтобы назначить их на аккаунты, у которых updated_at <= 10 минут
+        $units = Unit::where('updated_at', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->get();
+        if ($units->count() == 0) {
+            $units = Unit::all();
+            $input['status'] = 'pending';
+        }
+        $b = $this->doStuff($units, 'unit_id');
+
+        $tasks = Task::where('status', 'pending')
+            ->where('account_id', 0)
+            ->groupBy('order_id')
+            ->limit(5)
+            ->get();
+
+        if ($tasks->count() > 0) {
+            foreach ($tasks as $task) {
+                echo 'Taks id: ' . $task->id . PHP_EOL;
+                // Для ордера, в котором этот таск, берем все аккаунты.
+                $usedAccounts = Task::where('order_id', $task->order_id)->get(['account_id']);
+
+                // Делаеми выборку аккаунта, которого нет в этом ордере.
+                if ($task->country == 'any') {
+                    $accounts = Account::whereNotIn('unit_id', $usedAccounts)->inRandomOrder()->firstOrFail();
+                } else {
+                    $accounts = Account::whereNotIn('unit_id', $usedAccounts)->where('country', $task->country)->inRandomOrder()->firstOrFail();
+                }
+                echo 'Account id: ' . $accounts->id . PHP_EOL;
+
+                // Назначаем этот аккаунт юниту и этой таске
+                if ($accounts->count() > 0) {
+                    echo 'Accounts more than 0' . PHP_EOL;
+
+                    if ($task->country == 'any') {
+                        $task->country = $accounts->country;
+                    }
+
+                    if ($accounts->unit_id == 0) {
+                        $task->unit_id = $b->current();
+                        $b->next();
+
+                        echo 'New unit id: ' . $task->unit_id . PHP_EOL;
+
+                        Account::where('id', $accounts->id)->update(['unit_id' => $task->unit_id]);
+                    } else {
+                        echo 'Old unit id: ' . $accounts->unit_id . PHP_EOL;
+
+                        $task->unit_id =  $accounts->unit_id;
+                    }
+
+                    Task::where('id', $task->id)->update([
+                        'unit_id' => $task->unit_id,
+                        'account_id' => $accounts->id,
+                        'status' => 'created',
+                    ]);
+                    echo 'Saved' . PHP_EOL;
+                    // $task->save();
+                }
+
+                // Берем юнит из таблицы Accounts у которых есть связка, т.е. unit_id != 0
+                // $accounts = Account::whereNot('unit_id', 0)->whereNot('unit_id', $task->unit_id)->where('country', $task->country)->inRandomOrder()->limit(1)->get();
+            }
+        }
+
+
+        /*
+        $tasks = Task::where('status', 'pending')->groupBy('order_id')->limit(5)->get();
+
+        echo '<pre>';
+        foreach ($tasks as $task) {
+            echo $task->id . ', order_id: ' . $task->order_id . PHP_EOL;
+        }
+        echo '</pre>';
+        */
+
+        /*
+        $units = Unit::all();
+        $b = $this->doStuff($units, 'unit_id');
+
+        echo '<pre>';
+        for ($i = 0; $i < 10; $i++) {
+            echo 'dd: ' . $i . ': ' . $b->current() . PHP_EOL;
+            $b->next();
+        }
+        echo '</pre>';
+        */
+
+        /*
+        $accountType = 'google';
+        $accounts = Account::where('type', $accountType)->get();
+
+        $units = Unit::where('updated_at', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->get();
+        echo 'units->count: ' . $units->count() . PHP_EOL;
+        echo '<pre>';
+        foreach ($units as $unit) {
+            echo $unit->unit_id . PHP_EOL;
+        }
+        echo '</pre>';
+
+        // $Unit = Unit::all();
+        // $units = Unit::where('updated_at', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->get();
+        $units = Task::where('status', 'created')->where('updated_at', '>=', DB::raw('(NOW() - INTERVAL 15 MINUTE)'))->get('unit_id');
+
+        echo 'units->count: ' . $units->count() . PHP_EOL;
+
+        foreach ($units as $unit) {
+            echo $unit->unit_id . PHP_EOL;
+        }
+
+        DB::enableQueryLog();
+        $tasks = Task::where(function (Builder $query) {
+            $query->where('status', 'created')
+                ->orWhere('status', 'running');
+        })
+            ->where('updated_at', '<=', DB::raw('(NOW() - INTERVAL 15 MINUTE)'))
+            ->get(['id', 'unit_id', 'country']);
+        // $accounts = Account::where('unit_id', 0)->whereNot('unit_id', 666)->where('country', 'us')->inRandomOrder()->limit(1)->get();
+        dd(DB::getQueryLog());
+        exit;
+
+        if ($accounts->count() > 0) {
+            echo 'iii: ' . $accounts[0]['id'] . PHP_EOL;
+        }
+        // foreach ($accounts as $account) {
+        //     echo $account->id . ' account: ' . $account->unit_id . PHP_EOL;
+        // }
+
+        echo '<pre>';
+        print_r($units);
+        echo '</pre>';
+
+        // echo $Unit->random() . PHP_EOL;
+
+        /*
+        for ($i = 0; $i < 10; $i++) {
+            if ($accounts[$i]['unit_id'] == 0) {
+                $accounts[$i]['unit_id'] = $Unit->random()->id;
+
+                Account::where('id', $accounts[$i]['id'])->update(['unit_id' => $accounts[$i]['unit_id']]);
+            }
+            echo $accounts[$i]['id'] . ' -> ' . $accounts[$i]['unit_id'] . PHP_EOL;
+        }
+        */
+
+
+
+        // foreach ($Unit as $item) {
+        //     echo $item['phone_model'] . PHP_EOL;
+        // }
+
+        // return $this->sendResponse(UnitResource::collection($Unit), 'Unit retrieved successfully.');
+
+        echo '</pre>';
+    }
+
+    private function doStuff($array, $column)
+    {
+        $last = 0;
+        $current = 1;
+
+        while (true) {
+            $current = $last++;
+            if ($last == count($array)) {
+                $last = 0;
+            }
+            yield $array[$current][$column];
+        }
+    }
+}
