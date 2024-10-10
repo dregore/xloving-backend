@@ -64,9 +64,9 @@ class TaskController extends BaseController
 
         // 1. Берем аккаунты по стране и их юниты
         if ($input['country'] == 'any') {
-            $accounts = Account::where('type', $accountType)->get();
+            $accounts = Account::where('type', $accountType)->where('blocked', 0)->get();
         } else {
-            $accounts = Account::where('type', $accountType)->where('country', $input['country'])->get();
+            $accounts = Account::where('type', $accountType)->where('country', $input['country'])->where('blocked', 0)->get();
         }
 
         // 2. Получаем все юниты, чтобы назначить их на аккаунты, у которых updated_at <= 10 минут
@@ -212,7 +212,7 @@ class TaskController extends BaseController
         }
 
         if ($input['status'] == 'failed' && $task->attempts_changes == 0 && $task->bundles > 0) {
-            $accounts = Account::where('type', $accountType)->whereNot('unit_id', $unit_id)->where('country', $task->country)->inRandomOrder()->firstOrFail();
+            $accounts = Account::where('type', $accountType)->whereNot('unit_id', $unit_id)->where('country', $task->country)->where('blocked', 0)->inRandomOrder()->firstOrFail();
             if ($accounts->unit_id == 0) {
                 // $units = Unit::where('updated_at', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->whereNot('blocked', 1)->firstOrFail();
                 $units = Unit::where('last_seen', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->whereNot('blocked', 1)->firstOrFail();
@@ -226,6 +226,10 @@ class TaskController extends BaseController
             $task->bundles = $task->bundles - 1;
             $task->status = 'created';
             // $task->save();
+        }
+
+        if ($input['status'] == 'needs_confirmation') {
+            Account::where('id', $task->account_id)->update(['blocked' => 1, 'comment' => 'needs_confirmation']);
         }
 
         $task->save();

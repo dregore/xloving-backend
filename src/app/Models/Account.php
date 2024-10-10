@@ -20,5 +20,7 @@ class Account extends Model
         'password',
         'country',
         'backup_email',
+        'blocked',
+        'comment',
     ];
 }

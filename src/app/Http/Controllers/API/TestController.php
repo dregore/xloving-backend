@@ -25,6 +25,31 @@ class TestController extends BaseController
     {
         echo '<pre>';
 
+        $id = 232;
+        // берем все таски, где есть этот аккаунт
+        $tasks = Task::where('account_id', $id)->get();
+        if ($tasks->count() > 0) {
+            foreach ($tasks as $task) {
+                $orders[] = [
+                    'task_id' => $task['id'],
+                    'order_id' => $task['order_id'],
+                    'unit_id' => $task['unit_id'],
+                    'account_id' => $task['account_id'],
+                    'country' => $task['country'],
+                ];
+            }
+        }
+
+        foreach ($orders as &$item) {
+            // берем новый account_id, который не входит в список в данном ордере
+            $newAccount = Account::whereNot('id', $item['account_id'])->where('country', $item['country'])->where('blocked', 0)->inRandomOrder()->firstOrFail();
+            // назначаем новый аккаунт на таск для этого юнита
+            Task::where('id', $item['task_id'])->update(['accountt_id' => $newAccount->id]);
+            $item['account_id'] = $newAccount->id;
+        }
+
+
+        /*
         // 2. Получаем все юниты, чтобы назначить их на аккаунты, у которых updated_at <= 10 минут
         $units = Unit::where('updated_at', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->get();
         if ($units->count() == 0) {
@@ -87,6 +112,7 @@ class TestController extends BaseController
                 // $accounts = Account::whereNot('unit_id', 0)->whereNot('unit_id', $task->unit_id)->where('country', $task->country)->inRandomOrder()->limit(1)->get();
             }
         }
+            */
 
 
         /*
