@@ -51,6 +51,8 @@ class Task extends Model
         'confirm_button',
         'account_id',
         'ok_button',
-        'deeplink_page'
+        'deeplink_page',
+        'error_type',
+        'comment',
     ];
 }

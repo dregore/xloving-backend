@@ -11,6 +11,7 @@ use App\Models\Task;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\API\BaseController as BaseController;
+use Exception;
 use Illuminate\Http\JsonResponse;
 
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,14 @@ use Illuminate\Database\Eloquent\Builder;
 
 class TestController extends BaseController
 {
+
+    public function update(Request $request, int $task_id)
+    {
+        $input = $request->only(['error']);
+
+        echo $task_id . PHP_EOL;
+        print_r($input);
+    }
     /**
      * Display a listing of the resource.
      */
@@ -25,6 +34,20 @@ class TestController extends BaseController
     {
         echo '<pre>';
 
+        $unit_id = 51;
+        $input['task_id'] = 2919;
+
+        // DB::enableQueryLog(); //Enable query logging
+        $task = Task::where('unit_id', $unit_id)->firstWhere('id', $input['task_id']);
+        // dd(DB::getQueryLog()); //print the SQl query
+        if (!$task) {
+            return $this->sendError('No task found.');
+        }
+
+
+
+
+        /*
         $id = 232;
         // берем все таски, где есть этот аккаунт
         $tasks = Task::where('account_id', $id)->get();
@@ -47,7 +70,7 @@ class TestController extends BaseController
             Task::where('id', $item['task_id'])->update(['accountt_id' => $newAccount->id]);
             $item['account_id'] = $newAccount->id;
         }
-
+        */
 
         /*
         // 2. Получаем все юниты, чтобы назначить их на аккаунты, у которых updated_at <= 10 минут

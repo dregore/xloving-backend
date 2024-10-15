@@ -151,35 +151,12 @@ class TaskController extends BaseController
      * Update the specified resource in storage.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
+     * @param  int  $unit_id
      * @return \Illuminate\Http\Response
      */
-    /*
-    public function update(Request $request, Task $task): JsonResponse
+    public function update(Request $request, int $unit_id): JsonResponse
     {
-        $input = $request->all();
-
-        $validator = Validator::make($input, [
-            // 'task_id' => 'required',
-            'status' => 'required'
-        ]);
-
-        if ($validator->fails()) {
-            return $this->sendError('Validation Error.', $validator->errors());
-        }
-
-        // $task->id = $input['task_id'];
-        $task->status = $input['status'];
-        $task->save();
-
-        return $this->sendResponse(new TaskResource($task), 'Task updated successfully.');
-    }
-    */
-    public function update(Request $request, $unit_id): JsonResponse
-    {
-        $input = $request->only(['task_id', 'status']);
-
-        // print_r($input);
+        $input = $request->only(['task_id', 'status', 'error']);
 
         $validator = Validator::make($input, [
             'task_id' => 'required',
@@ -191,6 +168,11 @@ class TaskController extends BaseController
         }
 
         $task = Task::where('unit_id', $unit_id)->firstWhere('id', $input['task_id']);
+
+        if (!$task) {
+            return $this->sendError('No task found.');
+        }
+
         $task->id = $input['task_id'];
         $task->status = $input['status'];
 
@@ -208,15 +190,13 @@ class TaskController extends BaseController
         if ($input['status'] == 'failed' && $task->attempts_changes > 0 && $task->bundles > 0) {
             $task->status = 'created';
             $task->attempts_changes = $task->attempts_changes - 1;
-            // $task->save();
         }
 
         if ($input['status'] == 'failed' && $task->attempts_changes == 0 && $task->bundles > 0) {
             $accounts = Account::where('type', $accountType)->whereNot('unit_id', $unit_id)->where('country', $task->country)->where('blocked', 0)->inRandomOrder()->firstOrFail();
             if ($accounts->unit_id == 0) {
-                // $units = Unit::where('updated_at', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->whereNot('blocked', 1)->firstOrFail();
                 $units = Unit::where('last_seen', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->whereNot('blocked', 1)->firstOrFail();
-                $accounts->unit_id = $units->id;
+                $accounts->unit_id = $units->unit_id;
 
                 Account::where('id', $accounts->id)->update(['unit_id' => $accounts->unit_id]);
             }
@@ -225,7 +205,15 @@ class TaskController extends BaseController
             $task->attempts_changes = $task->attempts;
             $task->bundles = $task->bundles - 1;
             $task->status = 'created';
-            // $task->save();
+        }
+
+        if ($input['status'] == 'failed' && $task->status == 'failed' && $task->bundles == 0) {
+            $task->error_type = $input['error']['type'];
+            $task->comment = $input['error']['comment'];
+
+            if ($input['error']['type'] == 'account') {
+                Account::where('id', $task->account_id)->update(['blocked' => 1, 'comment' => 'account']);
+            }
         }
 
         if ($input['status'] == 'needs_confirmation') {
@@ -234,31 +222,7 @@ class TaskController extends BaseController
 
         $task->save();
 
-
-        /*
-        // Если status = failed, ставим другой unit_id на эту task по нужной стране и делаем статус created
-        if ($input['status'] == 'failed' && $task->attempts > 0) {
-
-            // DB::enableQueryLog();
-            $accounts = Account::where('type', $accountType)->whereNot('unit_id', $id)->where('country', $task->country)->inRandomOrder()->firstOrFail();
-            // dd(DB::getQueryLog());
-
-            if ($accounts->unit_id == 0) {
-                $units = Unit::where('updated_at', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->firstOrFail();
-                $accounts->unit_id = $units->id;
-
-                Account::where('id', $accounts->id)->update(['unit_id' => $accounts->unit_id]);
-            }
-            $task->unit_id = $accounts->unit_id;
-            $task->account_id = $accounts->id;
-            $task->status = 'created';
-        }
-
-        $task->attempts = $task->attempts - 1;
-        $task->save();
-        */
-
-        // Обновляем updated_at у unit
+        // Обновляем last_seen у unit
         $unit = Unit::where('unit_id', $unit_id)->first();
         if ($unit) {
             $unit->last_seen = date('Y-m-d H:i:s');

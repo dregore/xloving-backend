@@ -59,7 +59,7 @@ class UnitController extends BaseController
      */
     public function update(Request $request, $id): JsonResponse
     {
-        $input = $request->only(['phone_model', 'location', 'version', 'comment', 'blocked', 'without_timestamp']);
+        $input = $request->only(['unit_id', 'phone_model', 'location', 'version', 'comment', 'blocked', 'without_timestamp']);
 
         $unit = Unit::where('id', $id)->first();
 
@@ -83,6 +83,7 @@ class UnitController extends BaseController
         }
 
         $unit->update([
+            $unit->unit_id = $request->get('unit_id', $unit->unit_id),
             $unit->phone_model = $request->get('phone_model', $unit->phone_model),
             $unit->location = $request->get('location', $unit->location),
             $unit->version = $request->get('version', $unit->version),

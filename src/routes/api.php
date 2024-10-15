@@ -48,6 +48,7 @@ Route::controller(ProxyController::class)->group(function () {
 Route::post('/cookies/{unit_id}/{task_id}', [CookieUpload::class, 'fileUpload'])->name('fileUpload');
 Route::get('/cookies/{unit_id}/{task_id}', [CookieUpload::class, 'fileDownload'])->name('fileDownload');
 // Route::delete('/cookies/{unit_id}/{task_id}', [CookieUpload::class, 'fileDelete'])->name('fileDelete');
+Route::delete('orders/{order_id}', [TaskController::class, 'destoryByOrderId']);
 
 Route::get('/test', [TestController::class, 'index']);
-Route::delete('orders/{order_id}', [TaskController::class, 'destoryByOrderId']);
+Route::put('/test/{unit_id}', [TestController::class, 'update']);
