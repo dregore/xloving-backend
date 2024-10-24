@@ -34,6 +34,14 @@ class TestController extends BaseController
     {
         echo '<pre>';
 
+        $tasks = Task::where('status', 'delayed')->where(DB::raw("DATE_FORMAT(delayed_date, '%Y-%m-%d %H:%i')"), '=', date('Y:m:d H:i'))->get(['id', 'unit_id', 'country']);
+
+        /*
+        $id = 20;
+        $unit = Unit::where('id', $id)->first();
+        echo $unit->unit_id . PHP_EOL;
+        */
+        /*
         $unit_id = 51;
         $input['task_id'] = 2919;
 
@@ -43,7 +51,7 @@ class TestController extends BaseController
         if (!$task) {
             return $this->sendError('No task found.');
         }
-
+        */
 
 
 

@@ -54,5 +54,6 @@ class Task extends Model
         'deeplink_page',
         'error_type',
         'comment',
+        'delayed_date',
     ];
 }

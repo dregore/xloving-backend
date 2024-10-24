@@ -64,7 +64,7 @@ WORKDIR /var/www/html
 RUN groupadd -g 1000 dregore
 RUN useradd -u 1000 -g dregore dregore
 COPY --chown=www-data:www-data . /var/www
-# USER dregore
+# USER www-data
 
 EXPOSE 9000
 

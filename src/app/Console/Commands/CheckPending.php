@@ -3,6 +3,10 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+use App\Models\Unit;
+use App\Models\Account;
+use App\Models\Task;
 
 class CheckPending extends Command
 {
@@ -25,24 +29,29 @@ class CheckPending extends Command
      */
     public function handle()
     {
+        info("Check pending Job running at " . now());
         // 2. Получаем все юниты, чтобы назначить их на аккаунты, у которых updated_at <= 10 минут
         // $units = Unit::where('updated_at', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->whereNot('blocked', 1)->get();
         $units = Unit::where('last_seen', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->whereNot('blocked', 1)->get();
         if ($units->count() == 0) {
+            info('Active units count is 0');
+
             $units = Unit::all();
             $input['status'] = 'pending';
         }
         $b = $this->doStuff($units, 'unit_id');
 
+        info('Unactive units count is ' . $units->count());
+
         $tasks = Task::where('status', 'pending')
-            ->where('account_id', 0)
+            // ->where('account_id', 0)
             ->groupBy('order_id')
             ->limit(5)
             ->get();
 
         if ($tasks->count() > 0) {
             foreach ($tasks as $task) {
-                // echo 'Taks id: ' . $task->id . PHP_EOL;
+                info('Taks id: ' . $task->id);
                 // Для ордера, в котором этот таск, берем все аккаунты.
                 $usedAccounts = Task::where('order_id', $task->order_id)->get(['account_id']);
 
@@ -52,11 +61,11 @@ class CheckPending extends Command
                 } else {
                     $accounts = Account::whereNotIn('unit_id', $usedAccounts)->where('country', $task->country)->inRandomOrder()->firstOrFail();
                 }
-                // echo 'Account id: ' . $accounts->id . PHP_EOL;
+                info('Account id: ' . $accounts->id);
 
                 // Назначаем этот аккаунт юниту и этой таске
                 if ($accounts->count() > 0) {
-                    // echo 'Accounts more than 0' . PHP_EOL;
+                    info('Accounts more than 0');
 
                     if ($task->country == 'any') {
                         $task->country = $accounts->country;
@@ -66,11 +75,11 @@ class CheckPending extends Command
                         $task->unit_id = $b->current();
                         $b->next();
 
-                        // echo 'New unit id: ' . $task->unit_id . PHP_EOL;
+                        info('New unit id: ' . $task->unit_id);
 
                         Account::where('id', $accounts->id)->update(['unit_id' => $task->unit_id]);
                     } else {
-                        // echo 'Old unit id: ' . $accounts->unit_id . PHP_EOL;
+                        info('Old unit id: ' . $accounts->unit_id);
 
                         $task->unit_id =  $accounts->unit_id;
                     }
@@ -80,9 +89,11 @@ class CheckPending extends Command
                         'account_id' => $accounts->id,
                         'status' => 'created',
                     ]);
-                    // echo 'Saved' . PHP_EOL;
+                    info('Saved');
                 }
             }
+        } else {
+            info('No tasks with pending status.');
         }
     }
 

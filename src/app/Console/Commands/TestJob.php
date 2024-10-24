@@ -22,18 +22,18 @@ class TestJob extends Command
      *
      * @var string
      */
-    protected $description = 'Command description';
+    protected $description = 'Check tasks with status created but never taken to run.';
 
     /**
      * Execute the console command.
      */
     public function handle()
     {
-        info("Cron Job running at " . now());
+        info("Unfreeze Job running at " . now());
 
         // Проверяем таски со статусом created, running и updated_at <= 15 минут (п. 5)
         // $tasks = Task::where('status', 'created')->where('updated_at', '<=', DB::raw('(NOW() - INTERVAL 15 MINUTE)'))->get(['id', 'unit_id', 'country']);
-        $tasks = Task::where('status', 'created')->where('last_seen', '<=', DB::raw('(NOW() - INTERVAL 15 MINUTE)'))->get(['id', 'unit_id', 'country']);
+        $tasks = Task::where('status', 'created')->where('updated_at', '<=', DB::raw('(NOW() - INTERVAL 15 MINUTE)'))->get(['id', 'unit_id', 'country']);
         // $tasks = Task::where(function (Builder $query) {
         //     $query->where('status', 'created')
         //           ->orWhere('status', 'running');

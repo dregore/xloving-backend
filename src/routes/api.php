@@ -52,3 +52,5 @@ Route::delete('orders/{order_id}', [TaskController::class, 'destoryByOrderId']);
 
 Route::get('/test', [TestController::class, 'index']);
 Route::put('/test/{unit_id}', [TestController::class, 'update']);
+
+Route::post('/file-upload', [AccountController::class, 'fileUpload']);

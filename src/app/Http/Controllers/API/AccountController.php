@@ -102,4 +102,38 @@ class AccountController extends BaseController
 
         return $this->sendResponse([], 'Account deleted successfully.');
     }
+
+    /**
+     * CSV File upload function.
+     *
+     * @param Request $request
+     */
+    public function fileUpload(Request $request)
+    {
+        $request->validate([
+            'csv' => 'required|mimes:txt,zip|max:2048'
+        ]);
+
+        $file = $request->file('csv');
+        $fileName = time() . '_' . $file->getClientOriginalName();
+        $filePath = $file->storeAs('uploads', $fileName, 'public');
+
+        // return $filePath;
+        $filePath2 = storage_path() . '/app/public/' . $filePath;
+        $txt = file_get_contents($filePath2);
+
+        if (is_file(($filePath2))) {
+            return true;
+        }
+
+        return false;
+    }
+
+    public function fileRead($fileName)
+    {
+        $filePath = storage_path() . '/app/public/' . $fileName;
+        $txt = file_get_contents($filePath);
+
+        return $txt;
+    }
 }

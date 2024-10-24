@@ -9,3 +9,5 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote')->hourly();
 
 Schedule::command('app:test-job')->everyFifteenMinutes();
+Schedule::command('app:check-pending')->hourly();
+Schedule::command('app:delayed-job')->everyMinute();

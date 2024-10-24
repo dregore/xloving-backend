@@ -13,6 +13,7 @@ use DB;
 
 use App\Models\Account;
 use App\Models\Unit;
+use App\Models\Error;
 
 class TaskController extends BaseController
 {
@@ -79,6 +80,11 @@ class TaskController extends BaseController
         $b = $this->doStuff($units, 'unit_id');
 
         if (isset($input['amount'])) {
+
+            if ($input['fill_type'] == 'spread') {
+                $datesInterval = $this->intervalBreaks($input['amount']);
+            }
+
             for ($i = 0; $i < $input['amount']; $i++) {
                 $input['account_id'] = $accounts[$i]['id'] ?? 0;
 
@@ -101,6 +107,11 @@ class TaskController extends BaseController
                 if (!isset($accounts[$i]['id'])) {
                     $input['account_id'] = 0;
                     $input['status'] = 'pending';
+                }
+
+                if ($input['fill_type'] == 'spread' && $i > 0) {
+                    $input['status'] = 'delayed';
+                    $input['delayed_date'] = $datesInterval[$i];
                 }
 
                 $task = Task::create($input);
@@ -187,6 +198,16 @@ class TaskController extends BaseController
                 break;
         }
 
+        if ($input['status'] == 'failed') {
+            $error = new Error();
+            $error->task_id = $input['task_id'];
+            $error->unit_id = $unit_id;
+            $error->account_id = $task->account_id;
+            $error->type = $input['error']['type'];
+            $error->comment = $input['error']['comment'];
+            $error->save();
+        }
+
         if ($input['status'] == 'failed' && $task->attempts_changes > 0 && $task->bundles > 0) {
             $task->status = 'created';
             $task->attempts_changes = $task->attempts_changes - 1;
@@ -265,5 +286,24 @@ class TaskController extends BaseController
             }
             yield $array[$current][$column];
         }
+    }
+
+    private function intervalBreaks($spreadBlocks)
+    {
+        if ($spreadBlocks == 1) {
+            return date('Y-m-d H:i:s');
+        }
+
+        $totalMinutes = 1440; // 24h
+        $interval = round($totalMinutes / $spreadBlocks);
+
+        $startDate = new \DateTime(date('Y-m-d H:i:s'));
+        $endDate = $startDate->modify('+1 day')->format('Y-m-d H:i:s');
+
+        for ($i = 0; $i < $spreadBlocks; $i++) {
+            $dates[] = $startDate->modify('+' . $interval . ' minute')->format('Y-m-d H:i:s');
+        }
+
+        return $dates;
     }
 }
