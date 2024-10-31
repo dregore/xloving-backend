@@ -82,7 +82,8 @@ class TaskController extends BaseController
         if (isset($input['amount'])) {
 
             if ($input['fill_type'] == 'spread') {
-                $datesInterval = $this->intervalBreaks($input['amount']);
+                $spreadDays = $input['spread_days'] ?? 1;
+                $datesInterval = $this->intervalBreaks($input['amount'], $spreadDays);
             }
 
             for ($i = 0; $i < $input['amount']; $i++) {
@@ -115,6 +116,17 @@ class TaskController extends BaseController
                 }
 
                 $task = Task::create($input);
+
+                if ($input['retention'] != 0) {
+                    $retentionArray = explode(',', $input['retention']);
+                    foreach ($retentionArray as $item) {
+                        $input['type'] = 'launch';
+                        $input['status'] = 'delayed';
+                        $input['delayed_date'] = (new \DateTime(date('Y-m-d H:i:s')))->modify('+' . $item . ' day')->format('Y-m-d H:i:s');
+
+                        $task = Task::create($input);
+                    }
+                }
             }
         }
 
@@ -288,17 +300,17 @@ class TaskController extends BaseController
         }
     }
 
-    private function intervalBreaks($spreadBlocks)
+    private function intervalBreaks($spreadBlocks, $days = 1)
     {
         if ($spreadBlocks == 1) {
             return date('Y-m-d H:i:s');
         }
 
-        $totalMinutes = 1440; // 24h
+        $totalMinutes = 1440 * $days; // 24h
         $interval = round($totalMinutes / $spreadBlocks);
 
         $startDate = new \DateTime(date('Y-m-d H:i:s'));
-        $endDate = $startDate->modify('+1 day')->format('Y-m-d H:i:s');
+        // $endDate = $startDate->modify('+1 day')->format('Y-m-d H:i:s');
 
         for ($i = 0; $i < $spreadBlocks; $i++) {
             $dates[] = $startDate->modify('+' . $interval . ' minute')->format('Y-m-d H:i:s');

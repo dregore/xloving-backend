@@ -34,7 +34,15 @@ class TestController extends BaseController
     {
         echo '<pre>';
 
-        $tasks = Task::where('status', 'delayed')->where(DB::raw("DATE_FORMAT(delayed_date, '%Y-%m-%d %H:%i')"), '=', date('Y:m:d H:i'))->get(['id', 'unit_id', 'country']);
+        DB::enableQueryLog(); //Enable query logging
+        $tasks = Task::where('status', 'delayed')->where(DB::raw("DATE_FORMAT(delayed_date, '%Y-%m-%d %H:%i')"), '<=', date('Y-m-d H:i'))->get(['id', 'status']);
+        dd(DB::getQueryLog()); //print the SQl query
+        if ($tasks->count() > 0) {
+            foreach ($tasks as $task) {
+                echo $task->id . PHP_EOL;
+            }
+        }
+
 
         /*
         $id = 20;

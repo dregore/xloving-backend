@@ -30,7 +30,7 @@ class CheckDelayed extends Command
         info("Delayed Job running at " . now());
 
         // Проверяем таски со статусом delayed и delayed_date = now() с точностью до минуты
-        $tasks = Task::where('status', 'delayed')->where(DB::raw("DATE_FORMAT(delayed_date, '%Y-%m-%d %H:%i')"), '=', date('Y:m:d H:i'))->get(['id', 'status']);
+        $tasks = Task::where('status', 'delayed')->where(DB::raw("DATE_FORMAT(delayed_date, '%Y-%m-%d %H:%i')"), '<=', date('Y-m-d H:i'))->get(['id', 'status']);
 
         if ($tasks->count() > 0) {
             foreach ($tasks as $task) {

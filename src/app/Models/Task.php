@@ -55,5 +55,6 @@ class Task extends Model
         'error_type',
         'comment',
         'delayed_date',
+        'scroll_duration',
     ];
 }
