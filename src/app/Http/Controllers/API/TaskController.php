@@ -326,6 +326,44 @@ class TaskController extends BaseController
         return $this->sendResponse([], 'Tasks by order ID deleted successfully.');
     }
 
+    public function serverside(Request $request): JsonResponse
+    {
+        $page = ($request->start / $request->length) + 1;
+        $orderBy = $request->order[0]['name'];
+        $orderDir = $request->order[0]['dir'] == 'asc' ? 'asc' : 'desc';
+        $tasks = Task::orderBy($orderBy, $orderDir)->paginate($request->length, ['*'], 'page', $page);
+
+        if ($tasks->count() == 0) {
+            $base_array = array('draw' => $request->draw, 'recordsTotal' => 0, 'recordsFiltered' => 0);
+            $data_array = array('data' => array());
+            $final = array_merge($base_array, $data_array);
+            echo json_encode($final);
+            exit;
+        }
+
+        $base_array = array('draw' => $request->draw, 'recordsTotal' => $tasks->total(), 'recordsFiltered' => $tasks->total(), 'currentPage' => $page);
+        foreach ($tasks as $item) {
+            $data_array['data'][] = array_values([
+                "id" => $item['id'],
+                "unit_id" => $item['unit_id'],
+                "status" => $item['status'],
+                "type" => $item['type'],
+                "attempts" => $item['attempts'],
+                "delay_min" => $item['delay_min'],
+                "delay_max" => $item['delay_max'],
+                "app_name" => $item['app_name'],
+                "app_bundle" => $item['app_bundle'],
+                "delete" => $item['delete'],
+                "minutes" => $item['minutes'],
+                "seconds" => $item['seconds'],
+                "like" => $item['like'],
+            ]);
+        }
+        $final = array_merge($base_array, $data_array);
+
+        return response()->json($final);
+    }
+
     private function doStuff($array, $column)
     {
         $last = 0;

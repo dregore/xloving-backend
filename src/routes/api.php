@@ -29,6 +29,7 @@ Route::controller(RegisterController::class)->group(function () {
 Route::controller(TaskController::class)->group(function () {
     Route::resource('tasks', TaskController::class);
 });
+Route::post('/tasks/serverside', [TaskController::class, 'serverside']);
 
 Route::controller(AccountController::class)->group(function () {
     Route::resource('accounts', AccountController::class);
