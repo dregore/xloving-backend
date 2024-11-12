@@ -152,7 +152,7 @@ class AccountController extends BaseController
             exit;
         }
 
-        $base_array = array('draw' => $request->draw, 'recordsTotal' => $accounts->total(), 'recordsFiltered' => $accounts->total(), 'currentPage' => $page, 'sort' => $orderBy);
+        $base_array = array('draw' => $request->draw, 'recordsTotal' => $accounts->total(), 'recordsFiltered' => $accounts->total(), 'currentPage' => $page);
         foreach ($accounts as $item) {
             $data_array['data'][] = array_values([
                 "id" => $item['id'],
