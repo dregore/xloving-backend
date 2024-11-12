@@ -15,6 +15,8 @@ use App\Models\Account;
 use App\Models\Unit;
 use App\Models\Error;
 
+use App\Http\Controllers\API\CookieUpload;
+
 class TaskController extends BaseController
 {
     /**
@@ -50,24 +52,44 @@ class TaskController extends BaseController
 
         switch ($input['type']) {
             case 'install':
+                $usedAccounts = Task::where('type', $input['type'])->where('app_bundle', $input['app_bundle'])->get(['account_id']);
+                $accountType = 'google';
+                break;
             case 'youtube':
+                $usedAccounts = Task::where('type', $input['type'])->where('url', $input['url'])->get(['account_id']);
+                $accountType = 'google';
+                break;
+            case 'import_chrome_cookies':
+            case 'export_chrome_cookies':
+                $usedAccounts = [];
                 $accountType = 'google';
                 break;
 
             case 'tiktok':
+                $usedAccounts = Task::where('type', $input['type'])->where('url', $input['url'])->get(['account_id']);
                 $accountType = 'tiktok';
                 break;
         }
+
+        // if ($input['type'] == 'export_chrome_cookies') {
+        //     $cookie = new CookieUpload;
+        //     $input['filename'] = $cookie->justUpload($request);
+        // }
 
         // TODO: HARDCODED
         $input['attempts_changes'] = $input['attempts'];
         $input['bundles'] = 3;
 
         // 1. Берем аккаунты по стране и их юниты
+        // if ($input['country'] == 'any') {
+        //     $accounts = Account::where('type', $accountType)->where('blocked', 0)->get();
+        // } else {
+        //     $accounts = Account::where('type', $accountType)->where('country', $input['country'])->where('blocked', 0)->get();
+        // }
         if ($input['country'] == 'any') {
-            $accounts = Account::where('type', $accountType)->where('blocked', 0)->get();
+            $accounts = Account::whereNotIn('id', $usedAccounts)->where('type', $accountType)->where('blocked', 0)->get();
         } else {
-            $accounts = Account::where('type', $accountType)->where('country', $input['country'])->where('blocked', 0)->get();
+            $accounts = Account::whereNotIn('id', $usedAccounts)->where('type', $accountType)->where('blocked', 0)->where('country', $input['country'])->get();
         }
 
         // 2. Получаем все юниты, чтобы назначить их на аккаунты, у которых updated_at <= 10 минут
@@ -118,6 +140,7 @@ class TaskController extends BaseController
                 $task = Task::create($input);
 
                 if ($input['retention'] != 0) {
+                    $input['delete'] = 0;
                     $retentionArray = explode(',', $input['retention']);
                     foreach ($retentionArray as $item) {
                         $input['type'] = 'launch';
@@ -126,6 +149,12 @@ class TaskController extends BaseController
 
                         $task = Task::create($input);
                     }
+
+                    $lastRetentionDate = end($retentionArray) + 1;
+                    $input['type'] = 'uninstall';
+                    $input['status'] = 'delayed';
+                    $input['delayed_date'] = (new \DateTime(date('Y-m-d H:i:s')))->modify('+' . $lastRetentionDate . ' day')->format('Y-m-d H:i:s');
+                    $task = Task::create($input);
                 }
             }
         }
@@ -210,6 +239,12 @@ class TaskController extends BaseController
                 break;
         }
 
+        $accountErrors = [
+            'captcha_unsolvable',
+            'wrong_password',
+            'account'
+        ];
+
         if ($input['status'] == 'failed') {
             $error = new Error();
             $error->task_id = $input['task_id'];
@@ -218,6 +253,11 @@ class TaskController extends BaseController
             $error->type = $input['error']['type'];
             $error->comment = $input['error']['comment'];
             $error->save();
+
+            $errors = Error::where('account_id', $task->account_id)->whereIn('type', $accountErrors)->get();
+            if ($errors->count() >= 2) {
+                Account::where('id', $task->account_id)->update(['blocked' => 1, 'comment' => $error->comment]);
+            }
         }
 
         if ($input['status'] == 'failed' && $task->attempts_changes > 0 && $task->bundles > 0) {
@@ -240,14 +280,14 @@ class TaskController extends BaseController
             $task->status = 'created';
         }
 
-        if ($input['status'] == 'failed' && $task->status == 'failed' && $task->bundles == 0) {
-            $task->error_type = $input['error']['type'];
-            $task->comment = $input['error']['comment'];
+        // if ($input['status'] == 'failed' && $task->status == 'failed' && $task->bundles == 0) {
+        //     $task->error_type = $input['error']['type'];
+        //     $task->comment = $input['error']['comment'];
 
-            if ($input['error']['type'] == 'account') {
-                Account::where('id', $task->account_id)->update(['blocked' => 1, 'comment' => 'account']);
-            }
-        }
+        //     if ($input['error']['type'] == 'account') {
+        //         Account::where('id', $task->account_id)->update(['blocked' => 1, 'comment' => 'account']);
+        //     }
+        // }
 
         if ($input['status'] == 'needs_confirmation') {
             Account::where('id', $task->account_id)->update(['blocked' => 1, 'comment' => 'needs_confirmation']);
