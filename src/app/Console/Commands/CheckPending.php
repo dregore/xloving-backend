@@ -52,14 +52,41 @@ class CheckPending extends Command
         if ($tasks->count() > 0) {
             foreach ($tasks as $task) {
                 info('Taks id: ' . $task->id);
+
+                switch ($task->type) {
+                    case 'install':
+                        $usedAccounts = Task::where('type', $task->type)->where('app_bundle', $task->app_bundle)->get(['account_id']);
+                        $accountType = 'google';
+                        break;
+                    case 'youtube':
+                        $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
+                        $accountType = 'google';
+                        break;
+                    case 'import_chrome_cookies':
+                    case 'export_chrome_cookies':
+                        $usedAccounts = [];
+                        $accountType = 'google';
+                        break;
+
+                    case 'tiktok':
+                        $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
+                        $accountType = 'tiktok';
+                        break;
+                }
                 // Для ордера, в котором этот таск, берем все аккаунты.
-                $usedAccounts = Task::where('order_id', $task->order_id)->get(['account_id']);
+                // $usedAccounts = Task::where('order_id', $task->order_id)->get(['account_id']);
+                // Берем аккаунты, которые уже были использованы для бандла или ссылки в тасках.
 
                 // Делаеми выборку аккаунта, которого нет в этом ордере.
+                // if ($task->country == 'any') {
+                //     $accounts = Account::whereNotIn('unit_id', $usedAccounts)->inRandomOrder()->firstOrFail();
+                // } else {
+                //     $accounts = Account::whereNotIn('unit_id', $usedAccounts)->where('country', $task->country)->inRandomOrder()->firstOrFail();
+                // }
                 if ($task->country == 'any') {
-                    $accounts = Account::whereNotIn('unit_id', $usedAccounts)->inRandomOrder()->firstOrFail();
+                    $accounts = Account::whereNotIn('id', $usedAccounts)->where('type', $accountType)->where('blocked', 0)->inRandomOrder()->firstOrFail();
                 } else {
-                    $accounts = Account::whereNotIn('unit_id', $usedAccounts)->where('country', $task->country)->inRandomOrder()->firstOrFail();
+                    $accounts = Account::whereNotIn('id', $usedAccounts)->where('type', $accountType)->where('blocked', 0)->where('country', $task->country)->inRandomOrder()->firstOrFail();
                 }
                 info('Account id: ' . $accounts->id);
 
