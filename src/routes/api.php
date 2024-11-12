@@ -11,6 +11,7 @@ use App\Http\Controllers\API\ProxyController;
 use App\Http\Controllers\API\CookieUpload;
 use App\Http\Controllers\API\AccountController;
 use App\Http\Controllers\API\TestController;
+use App\Http\Controllers\API\ErrorController;
 
 // Route::get('/user', function (Request $request) {
 //     return $request->user();
@@ -32,6 +33,7 @@ Route::controller(TaskController::class)->group(function () {
 Route::controller(AccountController::class)->group(function () {
     Route::resource('accounts', AccountController::class);
 });
+Route::post('/accounts/serverside', [AccountController::class, 'serverside']);
 
 Route::controller(GooglecodeController::class)->group(function () {
     Route::resource('codes', GooglecodeController::class);
@@ -45,12 +47,19 @@ Route::controller(ProxyController::class)->group(function () {
     Route::resource('proxies', ProxyController::class);
 });
 
+Route::controller(ErrorController::class)->group(function () {
+    Route::resource('errors', ErrorController::class);
+});
+
+Route::post('/cookies/upload', [CookieUpload::class, 'justUpload'])->name('justUpload');
 Route::post('/cookies/{unit_id}/{task_id}', [CookieUpload::class, 'fileUpload'])->name('fileUpload');
 Route::get('/cookies/{unit_id}/{task_id}', [CookieUpload::class, 'fileDownload'])->name('fileDownload');
 // Route::delete('/cookies/{unit_id}/{task_id}', [CookieUpload::class, 'fileDelete'])->name('fileDelete');
 Route::delete('orders/{order_id}', [TaskController::class, 'destoryByOrderId']);
+Route::get('/cookies', [CookieUpload::class, 'index'])->name('index');
 
 Route::get('/test', [TestController::class, 'index']);
+Route::post('/test', [TestController::class, 'postTest']);
 Route::put('/test/{unit_id}', [TestController::class, 'update']);
 
 Route::post('/file-upload', [AccountController::class, 'fileUpload']);

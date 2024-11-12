@@ -8,6 +8,7 @@ use App\Http\Resources\UnitResource;
 use App\Models\Account;
 
 use App\Models\Task;
+use App\Models\Error;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\API\BaseController as BaseController;
@@ -19,6 +20,60 @@ use Illuminate\Database\Eloquent\Builder;
 
 class TestController extends BaseController
 {
+    public function postTest(Request $request): JsonResponse
+    {
+        // echo '<pre>';
+
+        // $start = $request->start;
+        // $length = $request->length;
+        // $draw = $request->draw;
+        // $search = $request->search->value;
+        // $order_column_id = $request->order->column;
+        // $order_dir = $request->order->dir;
+
+        $page = ($request->start / $request->length) + 1;
+        $orderBy = $request->order[0]['name'];
+        $orderDir = $request->order[0]['dir'] == 'asc' ? 'asc' : 'desc';
+        $accounts = Account::orderBy($orderBy, $orderDir)->paginate($request->length, ['*'], 'page', $page);
+        // $accounts = Account::paginate($request->length);
+
+        if ($accounts->count() == 0) {
+            $base_array = array('draw' => $request->draw, 'recordsTotal' => 0, 'recordsFiltered' => 0);
+            $data_array = array('data' => array());
+            $final = array_merge($base_array, $data_array);
+            echo json_encode($final);
+            exit;
+        }
+
+        $base_array = array('draw' => $request->draw, 'recordsTotal' => $accounts->total(), 'recordsFiltered' => $accounts->total(), 'currentPage' => $page, 'sort' => $orderBy);
+        // $data_array = $accounts->toArray();
+        foreach ($accounts as $item) {
+            $data_array['data'][] = array_values([
+                "id" => $item['id'],
+                "type" => $item['type'],
+                "email" => $item['email'],
+                "password" => $item['password'],
+                "country" => $item['country'],
+                "created_at" => $item['created_at'],
+                "updated_at" => $item['updated_at'],
+                "backup_email" => $item['backup_email'],
+                "actions" => '<button class="btn btn-info btn-edit" type="button">Edit</button>
+                            <button class="btn btn-danger btn-delete" type="button">Delete</button>',
+                // "blocked" => $item['blocked'],
+                // "comment" => $item['comment'],
+            ]);
+        }
+        $final = array_merge($base_array, $data_array);
+        // echo json_encode($final);
+        return response()->json($final);
+
+
+
+        // foreach ($accounts as $item) {
+        //     echo $item['id'] . ' -> ' . $item['email'] . PHP_EOL;
+        // }
+        // echo '</pre>';
+    }
 
     public function update(Request $request, int $task_id)
     {
@@ -30,10 +85,68 @@ class TestController extends BaseController
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
         echo '<pre>';
 
+        $task['country'] = 'any';
+        $type = 'tiktok';
+        $app_bundle = 'com.littlebgames.shoot_it';
+        $youtube_url = 'https://www.youtube.com/watch?v=k9d4PKcZ8fA';
+        $tiktok_url = 'https://vm.tiktok.com/ZMhhn41gA/';
+
+        // 1. При создании ордера, проверяем есть ли такой бандл или youtube ссылка в тасках.
+        switch ($type) {
+            case 'install':
+                $usedAccounts = Task::where('type', $type)->where('app_bundle', $app_bundle)->get(['account_id']);
+                $accountType = 'google';
+                break;
+
+            case 'youtube':
+                $usedAccounts = Task::where('type', $type)->where('url', $youtube_url)->get(['account_id']);
+                $accountType = 'google';
+                break;
+
+            case 'tiktok':
+                $usedAccounts = Task::where('type', $type)->where('url', $tiktok_url)->get(['account_id']);
+                $accountType = 'tiktok';
+                break;
+            default:
+                $usedAccounts = [];
+        }
+
+        // Делаеми выборку аккаунтов, которых нет в этом бандле или ссылке.
+        if ($task['country'] == 'any') {
+            $accounts = Account::whereNotIn('id', $usedAccounts)->where('type', $accountType)->where('blocked', 0)->get();
+        } else {
+            $accounts = Account::whereNotIn('id', $usedAccounts)->where('type', $accountType)->where('blocked', 0)->where('country', $task['country'])->get();
+        }
+
+        foreach ($accounts as $item) {
+            echo $item->id . PHP_EOL;
+        }
+
+
+
+        /*
+        echo $request->start . PHP_EOL;
+        $accounts = Account::paginate(15);
+        foreach ($accounts as $item) {
+            echo $item['id'] . ' -> ' . $item['email'] . PHP_EOL;
+        }
+        */
+
+        /*
+        $accountErrors = [
+            'captcha_unsolvable',
+            'wrong_password',
+            'account'
+        ];
+        $errors = Error::where('account_id', 1922)->whereIn('type', $accountErrors)->get();
+        echo $errors->count() . PHP_EOL;
+        */
+
+        /*
         DB::enableQueryLog(); //Enable query logging
         $tasks = Task::where('status', 'delayed')->where(DB::raw("DATE_FORMAT(delayed_date, '%Y-%m-%d %H:%i')"), '<=', date('Y-m-d H:i'))->get(['id', 'status']);
         dd(DB::getQueryLog()); //print the SQl query
@@ -42,7 +155,7 @@ class TestController extends BaseController
                 echo $task->id . PHP_EOL;
             }
         }
-
+        */
 
         /*
         $id = 20;

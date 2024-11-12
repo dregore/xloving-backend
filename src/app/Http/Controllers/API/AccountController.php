@@ -136,4 +136,39 @@ class AccountController extends BaseController
 
         return $txt;
     }
+
+    public function serverside(Request $request): JsonResponse
+    {
+        $page = ($request->start / $request->length) + 1;
+        $orderBy = $request->order[0]['name'];
+        $orderDir = $request->order[0]['dir'] == 'asc' ? 'asc' : 'desc';
+        $accounts = Account::orderBy($orderBy, $orderDir)->paginate($request->length, ['*'], 'page', $page);
+
+        if ($accounts->count() == 0) {
+            $base_array = array('draw' => $request->draw, 'recordsTotal' => 0, 'recordsFiltered' => 0);
+            $data_array = array('data' => array());
+            $final = array_merge($base_array, $data_array);
+            echo json_encode($final);
+            exit;
+        }
+
+        $base_array = array('draw' => $request->draw, 'recordsTotal' => $accounts->total(), 'recordsFiltered' => $accounts->total(), 'currentPage' => $page, 'sort' => $orderBy);
+        foreach ($accounts as $item) {
+            $data_array['data'][] = array_values([
+                "id" => $item['id'],
+                "type" => $item['type'],
+                "email" => $item['email'],
+                "password" => $item['password'],
+                "country" => $item['country'],
+                "created_at" => $item['created_at'],
+                "updated_at" => $item['updated_at'],
+                "backup_email" => $item['backup_email'],
+                "actions" => '<button class="btn btn-info btn-edit" type="button">Edit</button>
+                              <button class="btn btn-danger btn-delete" type="button">Delete</button>',
+            ]);
+        }
+        $final = array_merge($base_array, $data_array);
+
+        return response()->json($final);
+    }
 }
