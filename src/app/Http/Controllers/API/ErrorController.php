@@ -37,9 +37,15 @@ class ErrorController extends BaseController
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+    public function show(int $account_id)
     {
-        //
+        $accounts = Error::where('account_id', $account_id)->get();
+
+        if ($accounts) {
+            return $accounts;
+        }
+
+        return false;
     }
 
     /**
