@@ -140,8 +140,8 @@ class AccountController extends BaseController
     public function serverside(Request $request): JsonResponse
     {
         $page = ($request->start / $request->length) + 1;
-        $orderBy = $request->order[0]['name'];
-        $orderDir = $request->order[0]['dir'] == 'asc' ? 'asc' : 'desc';
+        $orderBy = $request->order[0]['name'] ?? 'id';
+        $orderDir = $request->order[0]['dir'] ?? 'asc';
         $accounts = Account::orderBy($orderBy, $orderDir)->paginate($request->length, ['*'], 'page', $page);
 
         if ($accounts->count() == 0) {
