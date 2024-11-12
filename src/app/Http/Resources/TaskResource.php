@@ -131,7 +131,7 @@ class TaskResource extends JsonResource
                     'confirm_button' => $this->confirm_button,
                     'ok_button' => $this->ok_button,
                     'deeplink_page' => (bool) $this->deeplink_page,
-                    'deeplink_page' => $this->scroll_duration,
+                    'scroll_duration' => $this->scroll_duration,
                 ],
                 // 'account' => AccountsResource::collection(Accounts::all()),
                 // 'account' => new AccountResource(Account::where('type', 'google')->inRandomOrder()->first()),
