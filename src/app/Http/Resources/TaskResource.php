@@ -102,7 +102,7 @@ class TaskResource extends JsonResource
         }
         */
 
-        if ($this->type == 'install' || $this->type == 'launch') {
+        if ($this->type == 'install' || $this->type == 'launch' || $this->type == 'uninstall') {
             return [
                 'task' => [
                     'id' => $this->id,
@@ -135,7 +135,7 @@ class TaskResource extends JsonResource
                 ],
                 // 'account' => AccountsResource::collection(Accounts::all()),
                 // 'account' => new AccountResource(Account::where('type', 'google')->inRandomOrder()->first()),
-                'proxy' => new ProxyResource(Proxy::inRandomOrder()->first()),
+                'proxy' => new ProxyResource(Proxy::where('country', $this->country)->inRandomOrder()->first()),
                 'account' => new AccountResource(Account::where('type', 'google')->where('id', $this->account_id)->first()),
                 // 'proxy' => new ProxyResource(Proxy::where('country', $this->country)->first()),
                 // 'codes' => new GooglecodeResource(Googlecode::all()),
@@ -175,7 +175,7 @@ class TaskResource extends JsonResource
                     'deeplink_page' => (bool) $this->deeplink_page,
                 ],
                 'proxy' => new ProxyResource(Proxy::inRandomOrder()->first()),
-                'account' => new AccountResource(Account::where('type', 'tiktok')->where('id', $this->account_id)->first()),
+                'account' => new AccountResource(Account::where('country', $this->country)->where('type', 'tiktok')->where('id', $this->account_id)->first()),
                 // 'account' => new AccountResource(Account::where('type', 'tiktok')->inRandomOrder()->first()),
                 // 'account' => new AccountResource(Account::where('type', 'tiktok')->where('id', $this->account_id)->first()),
                 // 'proxy' => new ProxyResource(Proxy::inRandomOrder()->first()),
@@ -209,7 +209,7 @@ class TaskResource extends JsonResource
                     'deeplink_page' => (bool) $this->deeplink_page,
                 ],
                 'proxy' => new ProxyResource(Proxy::inRandomOrder()->first()),
-                'account' => new AccountResource(Account::where('type', 'google')->where('id', $this->account_id)->first()),
+                'account' => new AccountResource(Account::where('country', $this->country)->where('type', 'google')->where('id', $this->account_id)->first()),
                 // 'account' => new AccountResource(Account::where('type', 'google')->inRandomOrder()->first()),
                 // 'account' => new AccountResource(Account::where('type', 'google')->where('id', $this->account_id)->first()),
                 // 'proxy' => new ProxyResource(Proxy::inRandomOrder()->first()),

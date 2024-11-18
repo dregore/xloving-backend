@@ -130,6 +130,8 @@ class TaskController extends BaseController
                 if (!isset($accounts[$i]['id'])) {
                     $input['account_id'] = 0;
                     $input['status'] = 'pending';
+                    $input['unit_id'] = $b->current();
+                    $b->next();
                 }
 
                 if ($input['fill_type'] == 'spread' && $i > 0) {
@@ -219,7 +221,9 @@ class TaskController extends BaseController
             return $this->sendError('Validation Error.', $validator->errors());
         }
 
+        // DB::enableQueryLog(); //Enable query logging
         $task = Task::where('unit_id', $unit_id)->firstWhere('id', $input['task_id']);
+        // dd(DB::getQueryLog()); //print the SQl query
 
         if (!$task) {
             return $this->sendError('No task found.');
@@ -230,11 +234,17 @@ class TaskController extends BaseController
 
         switch ($task->type) {
             case 'install':
+                $usedAccounts = Task::where('type', $task->type)->where('app_bundle', $task->app_bundle)->get(['account_id']);
+                $accountType = 'google';
+                break;
+
             case 'youtube':
+                $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
                 $accountType = 'google';
                 break;
 
             case 'tiktok':
+                $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
                 $accountType = 'tiktok';
                 break;
         }
@@ -266,7 +276,7 @@ class TaskController extends BaseController
         }
 
         if ($input['status'] == 'failed' && $task->attempts_changes == 0 && $task->bundles > 0) {
-            $accounts = Account::where('type', $accountType)->whereNot('unit_id', $unit_id)->where('country', $task->country)->where('blocked', 0)->inRandomOrder()->firstOrFail();
+            $accounts = Account::whereNotIn('id', $usedAccounts)->where('type', $accountType)->whereNot('unit_id', $unit_id)->where('country', $task->country)->where('blocked', 0)->inRandomOrder()->firstOrFail();
             if ($accounts->unit_id == 0) {
                 $units = Unit::where('last_seen', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->whereNot('blocked', 1)->firstOrFail();
                 $accounts->unit_id = $units->unit_id;

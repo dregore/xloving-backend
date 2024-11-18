@@ -89,6 +89,92 @@ class TestController extends BaseController
     {
         echo '<pre>';
 
+        $input['type'] = 'install';
+        $input['app_bundle'] = 'com.MarkL.Plinko';
+        $input['country'] = 'EN';
+        $input['amount'] = 100;
+        $input['fill_type'] = 'spread';
+        $input['spread_days'] = 13;
+
+        switch ($input['type']) {
+            case 'install':
+                $usedAccounts = Task::where('type', $input['type'])->where('app_bundle', $input['app_bundle'])->get(['account_id']);
+                $accountType = 'google';
+                break;
+            case 'youtube':
+                $usedAccounts = Task::where('type', $input['type'])->where('url', $input['url'])->get(['account_id']);
+                $accountType = 'google';
+                break;
+            case 'import_chrome_cookies':
+            case 'export_chrome_cookies':
+                $usedAccounts = [];
+                $accountType = 'google';
+                break;
+
+            case 'tiktok':
+                $usedAccounts = Task::where('type', $input['type'])->where('url', $input['url'])->get(['account_id']);
+                $accountType = 'tiktok';
+                break;
+        }
+
+        $accounts = Account::whereNotIn('id', $usedAccounts)->where('type', $accountType)->where('blocked', 0)->where('country', $input['country'])->get();
+        echo 'accounts: ' . $accounts->count()  . PHP_EOL;
+
+        $units = Unit::where('last_seen', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->whereNot('blocked', 1)->get();
+        echo 'units: ' . $units->count() . PHP_EOL;
+
+        if ($units->count() == 0) {
+            $units = Unit::all();
+            $input['status'] = 'pending';
+        }
+        $b = $this->doStuff($units, 'unit_id');
+
+        echo 'units: ' . $units->count() . PHP_EOL;
+        foreach ($units as $item) {
+            echo $item['unit_id'] . PHP_EOL;
+        }
+
+        if (isset($input['amount'])) {
+
+            if ($input['fill_type'] == 'spread') {
+                $spreadDays = $input['spread_days'] ?? 1;
+                $datesInterval = $this->intervalBreaks($input['amount'], $spreadDays);
+            }
+
+            for ($i = 0; $i < $input['amount']; $i++) {
+                $input['account_id'] = $accounts[$i]['id'] ?? 0;
+                // echo $i . ': account -> ' . $input['account_id'] . ', ';
+
+                if (isset($accounts[$i]['unit_id'])) {
+                    if ($accounts[$i]['unit_id'] == 0) {
+                        $input['unit_id'] = $b->current();
+                        $b->next();
+
+                        // echo 'unit_id(1) -> ' . $input['unit_id'];
+                    } else {
+                        $input['unit_id'] =  $accounts[$i]['unit_id'];
+
+                        // echo 'unit_id(2) -> ' . $input['unit_id'];
+                    }
+                }
+
+                if (!isset($accounts[$i]['id'])) {
+                    $input['account_id'] = 0;
+                    $input['status'] = 'pending';
+                    $input['unit_id'] = $b->current();
+                    $b->next();
+                }
+                // print_r($input);
+
+                if ($input['fill_type'] == 'spread' && $i > 0) {
+                    $input['status'] = 'delayed';
+                    $input['delayed_date'] = $datesInterval[$i];
+                }
+                print_r($input);
+                echo PHP_EOL;
+            }
+        }
+        /*
         $task['country'] = 'any';
         $type = 'tiktok';
         $app_bundle = 'com.littlebgames.shoot_it';
@@ -125,7 +211,7 @@ class TestController extends BaseController
         foreach ($accounts as $item) {
             echo $item->id . PHP_EOL;
         }
-
+        */
 
 
         /*
@@ -369,5 +455,24 @@ class TestController extends BaseController
             }
             yield $array[$current][$column];
         }
+    }
+
+    private function intervalBreaks($spreadBlocks, $days = 1)
+    {
+        if ($spreadBlocks == 1) {
+            return date('Y-m-d H:i:s');
+        }
+
+        $totalMinutes = 1440 * $days; // 24h
+        $interval = round($totalMinutes / $spreadBlocks);
+
+        $startDate = new \DateTime(date('Y-m-d H:i:s'));
+        // $endDate = $startDate->modify('+1 day')->format('Y-m-d H:i:s');
+
+        for ($i = 0; $i < $spreadBlocks; $i++) {
+            $dates[] = $startDate->modify('+' . $interval . ' minute')->format('Y-m-d H:i:s');
+        }
+
+        return $dates;
     }
 }
