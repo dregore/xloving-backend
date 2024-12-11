@@ -27,6 +27,9 @@ class Proxy extends Model
         'port',
         'login',
         'password',
-        'country'
+        'country',
+        'fails',
+        'active',
+        'alive',
     ];
 }

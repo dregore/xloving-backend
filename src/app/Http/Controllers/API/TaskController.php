@@ -2,27 +2,31 @@
 
 namespace App\Http\Controllers\API;
 
-use Illuminate\Http\Request;
-use App\Http\Controllers\API\BaseController as BaseController;
-use Validator;
-use Illuminate\Http\JsonResponse;
-
+use DateTime;
+use Generator;
 use App\Models\Task;
-use App\Http\Resources\TaskResource;
-use DB;
-
-use App\Models\Account;
 use App\Models\Unit;
 use App\Models\Error;
 
+use App\Models\Proxy;
+use App\Models\Account;
+use Illuminate\Http\Request;
+
+use Illuminate\Http\Response;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
+
+use App\Http\Resources\TaskResource;
+use Illuminate\Support\Facades\Validator;
 use App\Http\Controllers\API\CookieUpload;
+use App\Http\Controllers\API\BaseController as BaseController;
 
 class TaskController extends BaseController
 {
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function index(): JsonResponse
     {
@@ -35,7 +39,7 @@ class TaskController extends BaseController
      * Store a newly created resource in storage.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function store(Request $request): JsonResponse
     {
@@ -52,11 +56,11 @@ class TaskController extends BaseController
 
         switch ($input['type']) {
             case 'install':
-                $usedAccounts = Task::where('type', $input['type'])->where('app_bundle', $input['app_bundle'])->get(['account_id']);
+                $usedAccounts = Task::where('type', $input['type'])->where('app_bundle', $input['app_bundle'])->groupBy('account_id')->get(['account_id']);
                 $accountType = 'google';
                 break;
             case 'youtube':
-                $usedAccounts = Task::where('type', $input['type'])->where('url', $input['url'])->get(['account_id']);
+                $usedAccounts = Task::where('type', $input['type'])->where('url', $input['url'])->groupBy('account_id')->get(['account_id']);
                 $accountType = 'google';
                 break;
             case 'import_chrome_cookies':
@@ -66,7 +70,7 @@ class TaskController extends BaseController
                 break;
 
             case 'tiktok':
-                $usedAccounts = Task::where('type', $input['type'])->where('url', $input['url'])->get(['account_id']);
+                $usedAccounts = Task::where('type', $input['type'])->where('url', $input['url'])->groupBy('account_id')->get(['account_id']);
                 $accountType = 'tiktok';
                 break;
         }
@@ -81,11 +85,6 @@ class TaskController extends BaseController
         $input['bundles'] = 3;
 
         // 1. Берем аккаунты по стране и их юниты
-        // if ($input['country'] == 'any') {
-        //     $accounts = Account::where('type', $accountType)->where('blocked', 0)->get();
-        // } else {
-        //     $accounts = Account::where('type', $accountType)->where('country', $input['country'])->where('blocked', 0)->get();
-        // }
         if ($input['country'] == 'any') {
             $accounts = Account::whereNotIn('id', $usedAccounts)->where('type', $accountType)->where('blocked', 0)->get();
         } else {
@@ -93,72 +92,18 @@ class TaskController extends BaseController
         }
 
         // 2. Получаем все юниты, чтобы назначить их на аккаунты, у которых updated_at <= 10 минут
-        // $units = Unit::where('updated_at', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->whereNot('blocked', 1)->get();
+        $b = [];
         $units = Unit::where('last_seen', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->whereNot('blocked', 1)->get();
-        if ($units->count() == 0) {
-            $units = Unit::all();
-            $input['status'] = 'pending';
-        }
+        $units_count = $units->count();
         $b = $this->doStuff($units, 'unit_id');
+        echo 'units_count: ' . $units_count . PHP_EOL;
 
-        if (isset($input['amount'])) {
-
-            if ($input['fill_type'] == 'spread') {
-                $spreadDays = $input['spread_days'] ?? 1;
-                $datesInterval = $this->intervalBreaks($input['amount'], $spreadDays);
-            }
-
-            for ($i = 0; $i < $input['amount']; $i++) {
-                $input['account_id'] = $accounts[$i]['id'] ?? 0;
-
-                if ($input['country'] == 'any') {
-                    $input['country'] = $accounts[$i]['country'];
-                }
-
-                // 3. Назначаем юниты на аккаунты
-                if (isset($accounts[$i]['unit_id'])) {
-                    if ($accounts[$i]['unit_id'] == 0) {
-                        $input['unit_id'] = $b->current();
-                        $b->next();
-
-                        Account::where('id', $accounts[$i]['id'])->update(['unit_id' => $input['unit_id']]);
-                    } else {
-                        $input['unit_id'] =  $accounts[$i]['unit_id'];
-                    }
-                }
-
-                if (!isset($accounts[$i]['id'])) {
-                    $input['account_id'] = 0;
-                    $input['status'] = 'pending';
-                    $input['unit_id'] = $b->current();
-                    $b->next();
-                }
-
-                if ($input['fill_type'] == 'spread' && $i > 0) {
-                    $input['status'] = 'delayed';
-                    $input['delayed_date'] = $datesInterval[$i];
-                }
-
-                $task = Task::create($input);
-
-                if ($input['retention'] != 0) {
-                    $input['delete'] = 0;
-                    $retentionArray = explode(',', $input['retention']);
-                    foreach ($retentionArray as $item) {
-                        $input['type'] = 'launch';
-                        $input['status'] = 'delayed';
-                        $input['delayed_date'] = (new \DateTime(date('Y-m-d H:i:s')))->modify('+' . $item . ' day')->format('Y-m-d H:i:s');
-
-                        $task = Task::create($input);
-                    }
-
-                    $lastRetentionDate = end($retentionArray) + 1;
-                    $input['type'] = 'uninstall';
-                    $input['status'] = 'delayed';
-                    $input['delayed_date'] = (new \DateTime(date('Y-m-d H:i:s')))->modify('+' . $lastRetentionDate . ' day')->format('Y-m-d H:i:s');
-                    $task = Task::create($input);
-                }
-            }
+        if ($input['retention'] != 0) {
+            echo 'retentionTasks:' . PHP_EOL;
+            $task = $this->retentionTasks($input, $units_count, $b, $accounts);
+        } else {
+            echo 'otherTasks:' . PHP_EOL;
+            $task = $this->otherTasks($input, $units_count, $b, $accounts);
         }
 
         return $this->sendResponse(new TaskResource($task), 'Task created successfully.');
@@ -168,7 +113,7 @@ class TaskController extends BaseController
      * Display the specified resource.
      *
      * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function show($unit_id): JsonResponse
     {
@@ -179,23 +124,12 @@ class TaskController extends BaseController
             $unit->touch();
         }
 
-        // DB::enableQueryLog(); //Enable query logging
         $task = Task::where('unit_id', $unit_id)->firstWhere('status', 'created');
-        // dd(DB::getQueryLog()); //print the SQl query
 
         if (is_null($task)) {
-            // return $this->sendError('Task not found.');
-            return $this->sendResponse(['task' => ['idle' => 600]], 'Task not found.');
+            return $this->sendResponse(['task' => ['idle' => 300]], 'Task not found.');
         }
 
-        // $t = new TaskResource($task);
-        // $a = new AccountsResource($account);
-        // $s = compact($t, $a);
-        // if (!empty($account)) {
-        //     $a = [new TaskResource($task), new AccountsResource($account)];
-        // } else {
-        //     $a = new TaskResource($task);
-        // }
         $a = new TaskResource($task);
 
         return $this->sendResponse($a, 'Task retrieved successfully.');
@@ -206,7 +140,7 @@ class TaskController extends BaseController
      *
      * @param  \Illuminate\Http\Request  $request
      * @param  int  $unit_id
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function update(Request $request, int $unit_id): JsonResponse
     {
@@ -221,9 +155,7 @@ class TaskController extends BaseController
             return $this->sendError('Validation Error.', $validator->errors());
         }
 
-        // DB::enableQueryLog(); //Enable query logging
         $task = Task::where('unit_id', $unit_id)->firstWhere('id', $input['task_id']);
-        // dd(DB::getQueryLog()); //print the SQl query
 
         if (!$task) {
             return $this->sendError('No task found.');
@@ -232,27 +164,58 @@ class TaskController extends BaseController
         $task->id = $input['task_id'];
         $task->status = $input['status'];
 
+        // if ($task->proxy_id == 0) {
+        //     $proxy = Proxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
+
+        //     if (!$proxy) {
+        //         return $this->sendError('No proxy found.');
+        //     }
+
+        //     $task->proxy_id = $proxy->id;
+        //     Proxy::where('id', $task->proxy_id)->update(['active' => 0]);
+        // }
+
+        if ($input['status'] == 'done') {
+            Proxy::where('id', $task->proxy_id)->update(['active' => 1]);
+        }
+
+        $accountTypes = [
+            'install' => 'google',
+            'launch' => 'google',
+            'uninstall' => 'google',
+            'youtube' => 'google',
+            'tiktok' => 'tiktok',
+        ];
+
+        $usedAccounts = Task::where('type', $task->type);
+        $usedUnits = Task::where('type', $task->type);
         switch ($task->type) {
             case 'install':
-                $usedAccounts = Task::where('type', $task->type)->where('app_bundle', $task->app_bundle)->get(['account_id']);
-                $accountType = 'google';
+            case 'launch':
+            case 'uninstall':
+                $usedAccounts->where('app_bundle', $task->app_bundle)->groupBy('account_id');
+                $usedUnits->where('app_bundle', $task->app_bundle)->groupBy('unit_id');
+                $accountType = $accountTypes[$task->type];
                 break;
 
             case 'youtube':
-                $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
-                $accountType = 'google';
-                break;
-
             case 'tiktok':
-                $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
-                $accountType = 'tiktok';
+                $usedAccounts->where('url', $task->url)->groupBy('account_id');
+                $usedUnits->where('url', $task->url)->groupBy('unit_id');
+                $accountType = $accountTypes[$task->type];
                 break;
         }
+        $usedAccountsResponse = $usedAccounts->get(['account_id']);
+        $usedUnitsResponse = $usedUnits->get(['unit_id']);
+
+        // TODO: If retention != 0 and type = install, change unit and account upto 3 times and for delayed too.
+        // TODO: If retention != 0, after final fail - fail all delayed.
+        // TODO: If retention != 0 and fail launch - do not change unit!
 
         $accountErrors = [
             'captcha_unsolvable',
             'wrong_password',
-            'account'
+            'account',
         ];
 
         if ($input['status'] == 'failed') {
@@ -262,47 +225,117 @@ class TaskController extends BaseController
             $error->account_id = $task->account_id;
             $error->type = $input['error']['type'];
             $error->comment = $input['error']['comment'];
+            $error->status = $input['status'];
             $error->save();
 
             $errors = Error::where('account_id', $task->account_id)->whereIn('type', $accountErrors)->get();
             if ($errors->count() >= 2) {
                 Account::where('id', $task->account_id)->update(['blocked' => 1, 'comment' => $error->comment]);
             }
+
+            Proxy::where('id', $task->proxy_id)->update(['fails' => DB::raw('fails + 1')]);
+
+            if ($input['error']['type'] == 'proxy_error') {
+                Proxy::where('id', $task->proxy_id)->update(['active' => 1]);
+
+                $proxy = Proxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
+
+                if (!$proxy) {
+                    return $this->sendError('No proxy found.');
+                }
+
+                $task->proxy_id = $proxy->id;
+                Proxy::where('id', $task->proxy_id)->update(['active' => 0]);
+            }
         }
 
+        /**
+         * Give a chance for linked unit_id and account_id for a $task->attempts_changes times.
+         */
         if ($input['status'] == 'failed' && $task->attempts_changes > 0 && $task->bundles > 0) {
             $task->status = 'created';
             $task->attempts_changes = $task->attempts_changes - 1;
         }
 
+        /**
+         * If $task->attempts_changes ends - changes unit_id and account_id.
+         * 
+         * Exception: For retention tasks we can change only account_id if task types are launch or uninstall.
+         *            If task type is install, we should change unit_id and account id for task types launch and uninstall too.
+         *            Using retention_bundle_id which equal of id of install task.
+         */
         if ($input['status'] == 'failed' && $task->attempts_changes == 0 && $task->bundles > 0) {
-            $accounts = Account::whereNotIn('id', $usedAccounts)->where('type', $accountType)->whereNot('unit_id', $unit_id)->where('country', $task->country)->where('blocked', 0)->inRandomOrder()->firstOrFail();
-            if ($accounts->unit_id == 0) {
-                $units = Unit::where('last_seen', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->whereNot('blocked', 1)->firstOrFail();
-                $accounts->unit_id = $units->unit_id;
+            if ($task->retention != 0) {
+                $accounts = Account::whereNotIn('id', $usedAccountsResponse)->where('type', $accountType)->whereNot('unit_id', $unit_id)->where('country', $task->country)->where('blocked', 0)->inRandomOrder()->first();
+                if (!$accounts) {
+                    $task->status = 'pending';
+                } else {
+                    if ($accounts->unit_id == 0 && $task->type == 'install') {
+                        $units = Unit::whereNotIn('unit_id', $usedUnitsResponse)->where('last_seen', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->whereNot('blocked', 1)->first();
 
-                Account::where('id', $accounts->id)->update(['unit_id' => $accounts->unit_id]);
+                        if ($units) {
+                            $accounts->unit_id = $units->unit_id;
+                            Account::where('id', $accounts->id)->update(['unit_id' => $accounts->unit_id]);
+                            $task->status = 'created';
+                        } else {
+                            $task->status = 'pending';
+                        }
+                    }
+                    $task->unit_id = ($task->type == 'install') ? $accounts->unit_id : $task->unit_id;
+                    $task->account_id = $accounts->id;
+                }
+                $task->attempts_changes = $task->attempts;
+                $task->bundles = $task->bundles - 1;
+            } else {
+                $accounts = Account::whereNotIn('id', $usedAccountsResponse)->where('type', $accountType)->whereNot('unit_id', $unit_id)->where('country', $task->country)->where('blocked', 0)->inRandomOrder()->first();
+                if (!$accounts) {
+                    $task->status = 'pending';
+                } else {
+                    if ($accounts->unit_id == 0) {
+                        $units = Unit::where('last_seen', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->whereNot('blocked', 1)->first();
+
+                        if ($units) {
+                            $accounts->unit_id = $units->unit_id;
+                            Account::where('id', $accounts->id)->update(['unit_id' => $accounts->unit_id]);
+                            $task->status = 'created';
+                        } else {
+                            $task->status = 'pending';
+                        }
+                    }
+                    $task->unit_id = ($accounts->unit_id) ? $accounts->unit_id : $task->unit_id;
+                    $task->account_id = $accounts->id;
+                }
+                $task->attempts_changes = $task->attempts;
+                $task->bundles = $task->bundles - 1;
             }
-            $task->unit_id = $accounts->unit_id;
-            $task->account_id = $accounts->id;
-            $task->attempts_changes = $task->attempts;
-            $task->bundles = $task->bundles - 1;
-            $task->status = 'created';
         }
 
-        // if ($input['status'] == 'failed' && $task->status == 'failed' && $task->bundles == 0) {
-        //     $task->error_type = $input['error']['type'];
-        //     $task->comment = $input['error']['comment'];
+        if ($input['status'] == 'failed' && $task->bundles == 0 && $task->retention != 0) {
+            $task->where('retention_bundle_id', $task->retention_bundle_id)->update([
+                'status' => $input['status'],
+            ]);
+        }
 
-        //     if ($input['error']['type'] == 'account') {
-        //         Account::where('id', $task->account_id)->update(['blocked' => 1, 'comment' => 'account']);
-        //     }
-        // }
+        if ($input['status'] == 'failed' && $task->bundles == 0) {
+            Proxy::where('id', $task->proxy_id)->update(['active' => 1]);
+        }
 
         if ($input['status'] == 'needs_confirmation') {
             Account::where('id', $task->account_id)->update(['blocked' => 1, 'comment' => 'needs_confirmation']);
         }
 
+        if ($task->retention != 0 && $task->type == 'install') {
+            $now = date('Y-m-d H:i:s');
+            $delayed = $task->updated_at;
+            $time_diff = abs(strtotime($now) - strtotime($delayed));
+
+            $task->where('retention_bundle_id', $task->id)->update([
+                'unit_id' => $task->unit_id,
+                'status' => ($task->status == 'created') ? 'delayed' : $task->status,
+                'account_id' => $task->account_id,
+                'delayed_date' => DB::raw('delayed_date + INTERVAL ' . $time_diff . ' SECOND'),
+            ]);
+        }
         $task->save();
 
         // Обновляем last_seen у unit
@@ -319,7 +352,7 @@ class TaskController extends BaseController
      * Remove the specified resource from storage.
      *
      * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public function destroy($id): JsonResponse
     {
@@ -374,7 +407,16 @@ class TaskController extends BaseController
         return response()->json($final);
     }
 
-    private function doStuff($array, $column)
+    /**
+     * Iteration through any array and return id in infinite cycle
+     *
+     * @param \Illuminate\Database\Eloquent\Collection $array
+     * @param string $column
+     * 
+     * @return Generator
+     * 
+     */
+    private function doStuff(\Illuminate\Database\Eloquent\Collection $array, string $column): Generator
     {
         $last = 0;
         $current = 1;
@@ -388,7 +430,16 @@ class TaskController extends BaseController
         }
     }
 
-    private function intervalBreaks($spreadBlocks, $days = 1)
+    /**
+     * Breaks given dates for interval and returns array or string of datetime strings.
+     *
+     * @param int $spreadBlocks
+     * @param int $days
+     * 
+     * @return array | string
+     * 
+     */
+    private function intervalBreaks(int $spreadBlocks, int $days = 1): array | string
     {
         if ($spreadBlocks == 1) {
             return date('Y-m-d H:i:s');
@@ -398,12 +449,171 @@ class TaskController extends BaseController
         $interval = round($totalMinutes / $spreadBlocks);
 
         $startDate = new \DateTime(date('Y-m-d H:i:s'));
-        // $endDate = $startDate->modify('+1 day')->format('Y-m-d H:i:s');
 
         for ($i = 0; $i < $spreadBlocks; $i++) {
             $dates[] = $startDate->modify('+' . $interval . ' minute')->format('Y-m-d H:i:s');
         }
 
         return $dates;
+    }
+
+    private function otherTasks($input, $units_count, $b, $accounts)
+    {
+        if ($input['fill_type'] == 'spread') {
+            $spreadDays = $input['spread_days'] ?? 1;
+            $datesInterval = $this->intervalBreaks($input['amount'], $spreadDays);
+        }
+
+        for ($i = 0; $i < $input['amount']; $i++) {
+            $input['proxy_id'] = 0;
+
+            if ($input['country'] == 'any') {
+                $input['country'] = $accounts[$i]['country'];
+            }
+
+            $input['status'] = 'created';
+            if ($i >= $units_count) {
+                $input['status'] = 'pending';
+                $input['account_id'] = 0;
+                $input['unit_id'] = 0;
+            } else {
+                $input['account_id'] = $accounts[$i]['id'] ?? 0;
+            }
+
+            // 3. Назначаем юниты на аккаунты
+            if (isset($accounts[$i]['unit_id']) && $units_count > 0 && $i < $units_count) {
+                if ($accounts[$i]['unit_id'] == 0) {
+                    $input['unit_id'] = $b->current();
+                    $b->next();
+
+                    Account::where('id', $accounts[$i]['id'])->update(['unit_id' => $input['unit_id']]);
+                } else {
+                    $input['unit_id'] =  $accounts[$i]['unit_id'];
+                }
+            }
+
+            // if ($input['fill_type'] == 'spread' && $i > 0) {
+            //     $input['status'] = 'delayed';
+            //     if ($i >= $units_count) {
+            //         $input['status'] = 'pending';
+            //         $input['account_id'] = 0;
+            //         $input['unit_id'] = 0;
+            //     }
+            //     $input['delayed_date'] = $datesInterval[$i];
+            // }
+
+            if ($input['fill_type'] == 'spread' && $i > 0) {
+                $input['status'] = 'delayed';
+                $input['account_id'] = 0;
+                $input['unit_id'] = 0;
+                $input['delayed_date'] = $datesInterval[$i];
+            }
+
+            if (!isset($accounts[$i]['id'])) {
+                $input['account_id'] = 0;
+                $input['unit_id'] = 0;
+                $input['status'] = 'pending';
+            }
+
+            if ($input['status'] == 'created') {
+                $proxy = Proxy::where('active', 1)->where('country', $input['country'])->inRandomOrder()->first(['id']);
+
+                if ($proxy) {
+                    $input['proxy_id'] = $proxy->id;
+                    Proxy::where('id', $input['proxy_id'])->update(['active' => 0]);
+                } else {
+                    $input['status'] = 'pending';
+                    $input['proxy_id'] = 0;
+                }
+            }
+
+            $task = Task::create($input);
+
+            echo $i . ' -> INSTALL: unit_id: ' . $input['unit_id'] . ', account_id: ' . $input['account_id'] . ', status: ' . $input['status'] . PHP_EOL;
+        }
+
+        return $task;
+    }
+
+    private function retentionTasks($input, $units_count, $b, $accounts)
+    {
+        if ($input['fill_type'] == 'spread') {
+            $spreadDays = $input['spread_days'] ?? 1;
+            $datesInterval = $this->intervalBreaks($input['amount'], $spreadDays);
+        }
+
+        for ($i = 0; $i < $input['amount']; $i++) {
+            $input['proxy_id'] = 0;
+            $input['status'] = ($i >= $units_count) ? 'pending' : 'created';
+            $input['account_id'] = $accounts[$i]['id'] ?? 0;
+            $input['delete'] = 0;
+
+            if (isset($accounts[$i]['unit_id']) && $units_count > 0 && $i < $units_count) {
+                if ($accounts[$i]['unit_id'] == 0) {
+                    $input['unit_id'] = $b->current();
+                    $b->next();
+                } else {
+                    $input['unit_id'] =  $accounts[$i]['unit_id'];
+                }
+            }
+
+            if (!isset($accounts[$i]['id']) || $i >= $units_count) {
+                $input['account_id'] = 0;
+                $input['status'] = 'pending';
+                $input['unit_id'] = 0;
+            }
+
+            echo $i . ' -> units_count: ' . $units_count . ', INSTALL: unit_id: ' . $input['unit_id'] . ', account_id: ' . $input['account_id'] . ', status: ' . $input['status'] . PHP_EOL;
+
+            $input['type'] = 'install';
+            $input['delayed_date'] = date('Y-m-d H:i:s');
+            $input['retention_bundle_id'] = 0;
+
+            if ($input['fill_type'] == 'spread' && $i > 0) {
+                $input['status'] = 'delayed';
+                if ($i >= $units_count) {
+                    $input['status'] = 'pending';
+                    $input['account_id'] = 0;
+                    $input['unit_id'] = 0;
+                }
+                $input['delayed_date'] = $datesInterval[$i];
+            }
+
+            if ($input['status'] == 'created') {
+                $proxy = Proxy::where('active', 1)->where('country', $input['country'])->inRandomOrder()->first(['id']);
+
+                if ($proxy) {
+                    $input['proxy_id'] = $proxy->id;
+                    Proxy::where('id', $input['proxy_id'])->update(['active' => 0]);
+                } else {
+                    $input['status'] = 'pending';
+                    $input['proxy_id'] = 0;
+                }
+            }
+
+            $task = Task::create($input);
+            $lastInsertedId = $task->id;
+            $input['proxy_id'] = 0;
+
+            $retentionArray = explode(',', $input['retention']);
+            foreach ($retentionArray as $item) {
+                $input['type'] = 'launch';
+                $input['status'] = ($i >= $units_count) ? 'pending' : 'delayed';
+                $input['delayed_date'] = (new \DateTime($input['delayed_date']))->modify('+' . $item . ' day')->format('Y-m-d H:i:s');
+                $input['retention_bundle_id'] = $lastInsertedId;
+                echo $i . ' -> LAUNCH: unit_id: ' . $input['unit_id'] . ', account_id: ' . $input['account_id'] . ', status: ' . $input['status'] . ', last: ' . $lastInsertedId . PHP_EOL;
+                $task = Task::create($input);
+            }
+
+            $lastRetentionDate = end($retentionArray) + 1;
+            $input['type'] = 'uninstall';
+            $input['status'] = ($i >= $units_count) ? 'pending' : 'delayed';
+            $input['delayed_date'] = (new \DateTime($input['delayed_date']))->modify('+' . $lastRetentionDate . ' day')->format('Y-m-d H:i:s');
+            $input['retention_bundle_id'] = $lastInsertedId;
+            echo $i . ' -> UNINSTALL: unit_id: ' . $input['unit_id'] . ', account_id: ' . $input['account_id'] . ', status: ' . $input['status'] . ', last: ' . $lastInsertedId . PHP_EOL . PHP_EOL;
+            $task = Task::create($input);
+        }
+
+        return $task;
     }
 }

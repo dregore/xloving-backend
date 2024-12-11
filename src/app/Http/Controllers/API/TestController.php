@@ -2,21 +2,24 @@
 
 namespace App\Http\Controllers\API;
 
+use Exception;
+use App\Models\Task;
+
 use App\Models\Unit;
-use App\Http\Resources\UnitResource;
+
+use App\Models\Error;
+use App\Models\Proxy;
 
 use App\Models\Account;
-
-use App\Models\Task;
-use App\Models\Error;
-
+use App\Models\TestTask;
+use App\Models\TestAccount;
 use Illuminate\Http\Request;
-use App\Http\Controllers\API\BaseController as BaseController;
-use Exception;
-use Illuminate\Http\JsonResponse;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use App\Http\Resources\UnitResource;
 use Illuminate\Database\Eloquent\Builder;
+use App\Http\Controllers\API\BaseController as BaseController;
 
 class TestController extends BaseController
 {
@@ -82,6 +85,123 @@ class TestController extends BaseController
         echo $task_id . PHP_EOL;
         print_r($input);
     }
+
+    private function otherTasks($input, $units_count, $b, $accounts)
+    {
+        if (isset($input['amount'])) {
+
+            if ($input['fill_type'] == 'spread') {
+                $spreadDays = $input['spread_days'] ?? 1;
+                $datesInterval = $this->intervalBreaks($input['amount'], $spreadDays);
+            }
+
+            for ($i = 0; $i < $input['amount']; $i++) {
+                if ($input['country'] == 'any') {
+                    $input['country'] = $accounts[$i]['country'];
+                }
+                // $input['status'] = isset($input['status']) ? $input['status'] : 'created2';
+                // $input['status'] = 'created2';
+                // $input['status'] = ($i >= $units_count) ? 'pending2' : 'created2';
+                $input['status'] = 'created2';
+                if ($i >= $units_count) {
+                    $input['status'] = 'pending2';
+                    $input['account_id'] = 0;
+                    $input['unit_id'] = 0;
+                } else {
+                    $input['account_id'] = $accounts[$i]['id'] ?? 0;
+                }
+
+                // 3. Назначаем юниты на аккаунты
+                if (isset($accounts[$i]['unit_id']) && $units_count > 0 && $i < $units_count) {
+                    if ($accounts[$i]['unit_id'] == 0) {
+                        $input['unit_id'] = $b->current();
+                        $b->next();
+
+                        // Account::where('id', $accounts[$i]['id'])->update(['unit_id' => $input['unit_id']]);
+                    } else {
+                        $input['unit_id'] =  $accounts[$i]['unit_id'];
+                    }
+                }
+
+                if (!isset($accounts[$i]['id'])) {
+                    $input['account_id'] = 0;
+                    $input['unit_id'] = 0;
+                    $input['status'] = 'pending2';
+                    // $input['unit_id'] = $b->current();
+                    // $b->next();
+                }
+
+                if ($input['fill_type'] == 'spread' && $i > 0) {
+                    $input['status'] = 'delayed2';
+                    if ($i >= $units_count) {
+                        $input['status'] = 'pending2';
+                        $input['account_id'] = 0;
+                        $input['unit_id'] = 0;
+                    }
+                    // $input['status'] = ($i >= $units_count) ? 'pending2' : 'delayed2';
+                    $input['delayed_date'] = $datesInterval[$i];
+                }
+
+                // $task = Task::create($input);
+                echo $i . ' -> INSTALL: unit_id: ' . $input['unit_id'] . ', account_id: ' . $input['account_id'] . ', status: ' . $input['status'] . PHP_EOL;
+            }
+        }
+    }
+
+    private function retentionTasks($input, $units_count, $b, $accounts)
+    {
+        if (isset($input['amount'])) {
+            for ($i = 0; $i < $input['amount']; $i++) {
+                $input['status'] = ($i >= $units_count) ? 'pending2' : 'created2';
+                $input['account_id'] = $accounts[$i]['id'] ?? 0;
+
+                if (isset($accounts[$i]['unit_id'])) {
+                    if ($accounts[$i]['unit_id'] == 0) {
+                        $input['unit_id'] = $b->current();
+                        $b->next();
+                    } else {
+                        $input['unit_id'] =  $accounts[$i]['unit_id'];
+                    }
+                }
+
+                if (!isset($accounts[$i]['id']) || $i >= $units_count) {
+                    $input['account_id'] = 0;
+                    $input['status'] = 'pending2';
+                    $input['unit_id'] = 0;
+                }
+
+                echo $i . ' -> units_count: ' . $units_count . ', INSTALL: unit_id: ' . $input['unit_id'] . ', account_id: ' . $input['account_id'] . ', status: ' . $input['status'] . PHP_EOL;
+                // $task = Task::create($input);
+
+                $input['account_id'] = 0;
+                $input['delete'] = 0;
+                $retentionArray = explode(',', $input['retention']);
+                foreach ($retentionArray as $item) {
+                    $input['type'] = 'launch';
+                    $input['status'] = ($i >= $units_count) ? 'pending2' : 'delayed2';
+                    $input['delayed_date'] = (new \DateTime(date('Y-m-d H:i:s')))->modify('+' . $item . ' day')->format('Y-m-d H:i:s');
+                    echo $i . ' -> LAUNCH: unit_id: ' . $input['unit_id'] . ', account_id: ' . $input['account_id'] . ', status: ' . $input['status'] . PHP_EOL;
+                    // $task = Task::create($input);
+                }
+
+                $lastRetentionDate = end($retentionArray) + 1;
+                $input['type'] = 'uninstall';
+                $input['status'] = ($i >= $units_count) ? 'pending2' : 'delayed2';
+                $input['delayed_date'] = (new \DateTime(date('Y-m-d H:i:s')))->modify('+' . $lastRetentionDate . ' day')->format('Y-m-d H:i:s');
+                echo $i . ' -> UNINSTALL: unit_id: ' . $input['unit_id'] . ', account_id: ' . $input['account_id'] . ', status: ' . $input['status'] . PHP_EOL . PHP_EOL;
+                // $task = Task::create($input);
+            }
+        }
+    }
+
+    private function isRetention($input)
+    {
+        $tasks = Task::where('app_bundle', $input['app_bundle'])->where('unit_id', $input['unit_id'])->get(['app_bundle', 'unit_id', 'type', 'status']);
+        foreach ($tasks as $item) {
+            echo $item['app_bundle'] . ' -> ' . $item['unit_id'] . ' -> ' . $item['type'] . ' -> ' . $item['status'] . PHP_EOL;
+        }
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -89,12 +209,45 @@ class TestController extends BaseController
     {
         echo '<pre>';
 
+        $input['country'] = 'us';
+        $proxy = Proxy::where('active', 1)->where('country', $input['country'])->inRandomOrder()->first(['id']);
+        echo $proxy->id . PHP_EOL;
+
+        // $input['app_bundle'] = 'com.littlebitgames.idleevolution';
+        // $input['unit_id'] = 28;
+        // $this->isRetention($input);
+        /*
+        $accountErrors = [
+            'captcha_unsolvable',
+            'wrong_password',
+            'account',
+        ];
+        $task['account_id'] = 201;
+
+        DB::enableQueryLog(); //Enable query logging
+        $errors = Error::where('account_id', $task['account_id'])->whereIn('type', $accountErrors)->get();
+        dd(DB::getQueryLog()); //print the SQl query
+        */
+
+        /*
+        DB::enableQueryLog(); //Enable query logging
+        $usedAccounts = TestTask::where('type', 'install');
+        $usedAccounts->where('app_bundle', 'app.test.3')->groupBy('account_id');
+        $usedAccountsResponse = $usedAccounts->get(['account_id']);
+
+        $accounts = TestAccount::whereNotIn('id', $usedAccountsResponse)->where('type', 'google')->whereNot('unit_id', 27)->where('country', 'us')->where('blocked', 0)->inRandomOrder()->first();
+        dd(DB::getQueryLog()); //print the SQl query
+        */
+
+        /*
         $input['type'] = 'install';
         $input['app_bundle'] = 'com.MarkL.Plinko';
-        $input['country'] = 'EN';
-        $input['amount'] = 100;
-        $input['fill_type'] = 'spread';
+        $input['country'] = 'us';
+        $input['amount'] = 150;
+        $input['fill_type'] = 'fast'; // fast, spread
         $input['spread_days'] = 13;
+        $input['retention'] = 0;
+        // $input['retention'] = '1,3,4,6';
 
         switch ($input['type']) {
             case 'install':
@@ -117,23 +270,41 @@ class TestController extends BaseController
                 break;
         }
 
+        echo 'usedAccounts: ' . $usedAccounts->count() . PHP_EOL;
+
         $accounts = Account::whereNotIn('id', $usedAccounts)->where('type', $accountType)->where('blocked', 0)->where('country', $input['country'])->get();
         echo 'accounts: ' . $accounts->count()  . PHP_EOL;
 
         $units = Unit::where('last_seen', '>=', DB::raw('(NOW() - INTERVAL 10 MINUTE)'))->whereNot('blocked', 1)->get();
         echo 'units: ' . $units->count() . PHP_EOL;
 
-        if ($units->count() == 0) {
-            $units = Unit::all();
-            $input['status'] = 'pending';
+        // if ($units->count() == 0) {
+        //     // if ($cc == 0) {
+        //     $units = Unit::all();
+        //     $input['status'] = 'pending';
+        // }
+
+        if ($units->count() > 0) {
+            $b = $this->doStuff($units, 'unit_id');
         }
-        $b = $this->doStuff($units, 'unit_id');
 
         echo 'units: ' . $units->count() . PHP_EOL;
         foreach ($units as $item) {
             echo $item['unit_id'] . PHP_EOL;
         }
+        $units_count = $units->count();
+        // $units_count = 0;
 
+        if ($input['retention'] != 0) {
+            echo 'retentionTasks:' . PHP_EOL;
+            $this->retentionTasks($input, $units_count, $b, $accounts);
+        } else {
+            echo 'otherTasks:' . PHP_EOL;
+            $this->otherTasks($input, $units_count, $b, $accounts);
+        }
+        */
+
+        /*
         if (isset($input['amount'])) {
 
             if ($input['fill_type'] == 'spread') {
@@ -142,6 +313,7 @@ class TestController extends BaseController
             }
 
             for ($i = 0; $i < $input['amount']; $i++) {
+                $input['status'] = 'created';
                 $input['account_id'] = $accounts[$i]['id'] ?? 0;
                 // echo $i . ': account -> ' . $input['account_id'] . ', ';
 
@@ -167,13 +339,35 @@ class TestController extends BaseController
                 // print_r($input);
 
                 if ($input['fill_type'] == 'spread' && $i > 0) {
+                    $input['account_id'] = 0;
                     $input['status'] = 'delayed';
                     $input['delayed_date'] = $datesInterval[$i];
                 }
-                print_r($input);
-                echo PHP_EOL;
+                // print_r($input);
+                // echo PHP_EOL;
+                echo 'INSTALL: unit_id: ' . $input['unit_id'] . ', account_id: ' . $input['account_id'] . ', status: ' . $input['status'] . PHP_EOL;
+
+                if ($input['retention'] != 0) {
+                    $input['account_id'] = 0;
+                    $input['delete'] = 0;
+                    $retentionArray = explode(',', $input['retention']);
+                    foreach ($retentionArray as $item) {
+                        $input['type'] = 'launch';
+                        $input['status'] = 'delayed';
+                        $input['delayed_date'] = (new \DateTime(date('Y-m-d H:i:s')))->modify('+' . $item . ' day')->format('Y-m-d H:i:s');
+                        echo 'LAUNCH: unit_id: ' . $input['unit_id'] . ', account_id: ' . $input['account_id'] . ', status: ' . $input['status'] . PHP_EOL;
+                    }
+
+                    $lastRetentionDate = end($retentionArray) + 1;
+                    $input['type'] = 'uninstall';
+                    $input['status'] = 'delayed';
+                    $input['delayed_date'] = (new \DateTime(date('Y-m-d H:i:s')))->modify('+' . $lastRetentionDate . ' day')->format('Y-m-d H:i:s');
+                    echo 'UNINSTALL: unit_id: ' . $input['unit_id'] . ', account_id: ' . $input['account_id'] . ', status: ' . $input['status'] . PHP_EOL . PHP_EOL;
+                }
             }
         }
+        */
+
         /*
         $task['country'] = 'any';
         $type = 'tiktok';

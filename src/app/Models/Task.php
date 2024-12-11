@@ -5,10 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Iksaku\Laravel\MassUpdate\MassUpdatable;
 
 class Task extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, MassUpdatable;
 
     // protected $primaryKey = 'unit_id';
 
@@ -56,5 +57,7 @@ class Task extends Model
         'comment',
         'delayed_date',
         'scroll_duration',
+        'retention_bundle_id',
+        'proxy_id',
     ];
 }

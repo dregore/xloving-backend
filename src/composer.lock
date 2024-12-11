@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "8fa2d0dd5b833adf5981da170259333f",
+    "content-hash": "3173bfb3afe33a0d6694e8a23408017f",
     "packages": [
         {
             "name": "brick/math",
@@ -1049,6 +1049,60 @@
                 }
             ],
             "time": "2023-12-03T19:50:20+00:00"
+        },
+        {
+            "name": "iksaku/laravel-mass-update",
+            "version": "1.0.7",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/iksaku/laravel-mass-update.git",
+                "reference": "fd18e9379e89508c2a0521b98fc53ee117ab349d"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/iksaku/laravel-mass-update/zipball/fd18e9379e89508c2a0521b98fc53ee117ab349d",
+                "reference": "fd18e9379e89508c2a0521b98fc53ee117ab349d",
+                "shasum": ""
+            },
+            "require": {
+                "illuminate/database": "^8.71|^9.0|^10.0|^11.0",
+                "illuminate/support": "^8.71|^9.0|^10.0|^11.0",
+                "php": "^8.0"
+            },
+            "require-dev": {
+                "orchestra/testbench": "^8.0|^9.0",
+                "pestphp/pest": "^1.19|^2.0",
+                "vimeo/psalm": "^4.18|^5.6"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Iksaku\\Laravel\\MassUpdate\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Jorge González",
+                    "email": "yo@jorgeglz.io",
+                    "role": "Developer"
+                }
+            ],
+            "description": "Update multiple Laravel Model records, each with different values, using a single query!",
+            "homepage": "https://github.com/iksaku/laravel-mass-update",
+            "keywords": [
+                "iksaku",
+                "laravel",
+                "laravel-mass-update"
+            ],
+            "support": {
+                "issues": "https://github.com/iksaku/laravel-mass-update/issues",
+                "source": "https://github.com/iksaku/laravel-mass-update/tree/1.0.7"
+            },
+            "time": "2024-03-23T20:48:41+00:00"
         },
         {
             "name": "laravel/framework",
@@ -6092,6 +6146,75 @@
             "time": "2024-06-18T17:36:56+00:00"
         },
         {
+            "name": "laravel/telescope",
+            "version": "v5.2.5",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/laravel/telescope.git",
+                "reference": "f68386a8d816c9e3a011b8301bfd263213bf00d4"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/laravel/telescope/zipball/f68386a8d816c9e3a011b8301bfd263213bf00d4",
+                "reference": "f68386a8d816c9e3a011b8301bfd263213bf00d4",
+                "shasum": ""
+            },
+            "require": {
+                "ext-json": "*",
+                "laravel/framework": "^8.37|^9.0|^10.0|^11.0",
+                "php": "^8.0",
+                "symfony/console": "^5.3|^6.0|^7.0",
+                "symfony/var-dumper": "^5.0|^6.0|^7.0"
+            },
+            "require-dev": {
+                "ext-gd": "*",
+                "guzzlehttp/guzzle": "^6.0|^7.0",
+                "laravel/octane": "^1.4|^2.0|dev-develop",
+                "orchestra/testbench": "^6.40|^7.37|^8.17|^9.0",
+                "phpstan/phpstan": "^1.10",
+                "phpunit/phpunit": "^9.0|^10.5"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Laravel\\Telescope\\TelescopeServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Laravel\\Telescope\\": "src/",
+                    "Laravel\\Telescope\\Database\\Factories\\": "database/factories/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Taylor Otwell",
+                    "email": "taylor@laravel.com"
+                },
+                {
+                    "name": "Mohamed Said",
+                    "email": "mohamed@laravel.com"
+                }
+            ],
+            "description": "An elegant debug assistant for the Laravel framework.",
+            "keywords": [
+                "debugging",
+                "laravel",
+                "monitoring"
+            ],
+            "support": {
+                "issues": "https://github.com/laravel/telescope/issues",
+                "source": "https://github.com/laravel/telescope/tree/v5.2.5"
+            },
+            "time": "2024-10-31T17:06:07+00:00"
+        },
+        {
             "name": "mockery/mockery",
             "version": "1.6.12",
             "source": {
@@ -8416,12 +8539,12 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
         "php": "^8.2"
     },
-    "platform-dev": [],
+    "platform-dev": {},
     "plugin-api-version": "2.6.0"
 }

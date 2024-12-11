@@ -13,6 +13,8 @@ use App\Http\Controllers\API\AccountController;
 use App\Http\Controllers\API\TestController;
 use App\Http\Controllers\API\ErrorController;
 
+use App\Http\Controllers\TEST\TestTaskController;
+
 // Route::get('/user', function (Request $request) {
 //     return $request->user();
 // })->middleware('auth:sanctum');
@@ -64,3 +66,13 @@ Route::post('/test', [TestController::class, 'postTest']);
 Route::put('/test/{unit_id}', [TestController::class, 'update']);
 
 Route::post('/file-upload', [AccountController::class, 'fileUpload']);
+
+/**
+ * TEST ROUTES
+ */
+Route::controller(TestTaskController::class)->group(function () {
+    Route::resource('test_tasks', TestTaskController::class);
+});
+
+Route::get('/pending_job', [TestTaskController::class, 'pendingJob']);
+Route::get('/delayed_job', [TestTaskController::class, 'delayedJob']);
