@@ -5,10 +5,10 @@ namespace App\Http\Controllers\TEST;
 use DateTime;
 use Generator;
 use App\Models\Error;
-use App\Models\TestProxy;
 use App\Models\TestTask;
-
 use App\Models\TestUnit;
+
+use App\Models\TestProxy;
 use App\Models\TestAccount;
 use Illuminate\Http\Request;
 
@@ -17,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
 use App\Http\Resources\TaskResource;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Controllers\API\CookieUpload;
 use App\Http\Controllers\API\BaseController as BaseController;
@@ -130,6 +131,22 @@ class TestTaskController extends BaseController
             return $this->sendResponse(['task' => ['idle' => 600]], 'Task not found.');
         }
 
+        // TODO: check for free proxy
+        if ($task->proxy_id == 0) {
+            $proxy = TestProxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
+            // $proxy = null; // TODO: test
+            if (!$proxy) {
+                // $message = 'There is no free proxy... trying busy...';
+                // echo $message . PHP_EOL;
+                $proxy = TestProxy::where('active', 0)->where('country', $task->country)->inRandomOrder()->first(['id']);
+            }
+            $proxy_id = $proxy->id;
+            TestProxy::where('id', $proxy_id)->update(['active' => 0]);
+
+            $task->proxy_id = $proxy_id;
+            $task->save();
+        }
+
         $a = new TaskResource($task);
 
         return $this->sendResponse($a, 'Task retrieved successfully.');
@@ -163,6 +180,21 @@ class TestTaskController extends BaseController
 
         $task->id = $input['task_id'];
         $task->status = $input['status'];
+
+        // if ($task->proxy_id == 0) {
+        //     $proxy = Proxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
+
+        //     if (!$proxy) {
+        //         return $this->sendError('No proxy found.');
+        //     }
+
+        //     $task->proxy_id = $proxy->id;
+        //     Proxy::where('id', $task->proxy_id)->update(['active' => 0]);
+        // }
+
+        if ($input['status'] == 'done') {
+            TestProxy::where('id', $task->proxy_id)->update(['active' => 1]);
+        }
 
         $accountTypes = [
             'install' => 'google',
@@ -204,18 +236,40 @@ class TestTaskController extends BaseController
         ];
 
         if ($input['status'] == 'failed') {
-            $error = new Error();
-            $error->task_id = $input['task_id'];
-            $error->unit_id = $unit_id;
-            $error->account_id = $task->account_id;
-            $error->type = $input['error']['type'];
-            $error->comment = $input['error']['comment'];
-            $error->status = $input['status'];
-            $error->save();
+            // $error = new Error();
+            // $error->task_id = $input['task_id'];
+            // $error->unit_id = $unit_id;
+            // $error->account_id = $task->account_id;
+            // $error->type = $input['error']['type'];
+            // $error->comment = $input['error']['comment'];
+            // $error->status = $input['status'];
+            // $error->save();
 
-            $errors = Error::where('account_id', $task->account_id)->whereIn('type', $accountErrors)->get();
-            if ($errors->count() >= 2) {
-                TestAccount::where('id', $task->account_id)->update(['blocked' => 1, 'comment' => $error->comment]);
+            // $errors = Error::where('account_id', $task->account_id)->whereIn('type', $accountErrors)->get();
+            // if ($errors->count() >= 2) {
+            //     TestAccount::where('id', $task->account_id)->update(['blocked' => 1, 'comment' => $error->comment]);
+            // }
+
+            TestProxy::where('id', $task->proxy_id)->update(['fails' => DB::raw('fails + 1')]);
+
+            if ($input['error']['type'] == 'nonworking_proxy') {
+                TestProxy::where('id', $task->proxy_id)->update(['active' => 1]);
+
+                $proxy = TestProxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
+                // $proxy = null;
+
+                //TODO: Pending or leave as is?
+                if (!$proxy) {
+                    $task->status = 'pending';
+                    $task->proxy_id = 0;
+                    $task->attempts_changes = $task->attempts_changes - 1;
+                    $task->save();
+
+                    return $this->sendError('No proxy found.');
+                } else {
+                    $task->proxy_id = $proxy->id;
+                    TestProxy::where('id', $task->proxy_id)->update(['active' => 0]);
+                }
             }
         }
 
@@ -281,9 +335,33 @@ class TestTaskController extends BaseController
         }
 
         if ($input['status'] == 'failed' && $task->bundles == 0 && $task->retention != 0) {
-            $task->where('retention_bundle_id', $task->retention_bundle_id)->update([
-                'status' => $input['status'],
-            ]);
+            echo 'here' . PHP_EOL;
+            if ($task->type == 'install') {
+                $task->where('id', $task->id)->update([
+                    'status' => $input['status'],
+                ]);
+
+                $task->where('retention_bundle_id', $task->id)->update([
+                    'status' => $input['status'],
+                ]);
+            }
+
+            if ($task->type == 'launch' || $task->type == 'uninstall') {
+                $task->where('id', $task->retention_bundle_id)->update([
+                    'status' => $input['status'],
+                ]);
+
+                $task->where('retention_bundle_id', $task->retention_bundle_id)->update([
+                    'status' => $input['status'],
+                ]);
+            }
+            // $task->where('retention_bundle_id', $task->retention_bundle_id)->update([
+            //     'status' => $input['status'],
+            // ]);
+        }
+
+        if ($input['status'] == 'failed' && $task->bundles == 0) {
+            TestProxy::where('id', $task->proxy_id)->update(['active' => 1]);
         }
 
         if ($input['status'] == 'needs_confirmation') {
@@ -302,7 +380,10 @@ class TestTaskController extends BaseController
                 'delayed_date' => DB::raw('delayed_date + INTERVAL ' . $time_diff . ' SECOND'),
             ]);
         }
+
+        // DB::enableQueryLog(); //Enable query logging
         $task->save();
+        // dd(DB::getQueryLog()); //print the SQl query
 
         // Обновляем last_seen у unit
         $unit = TestUnit::where('unit_id', $unit_id)->first();
@@ -430,14 +511,18 @@ class TestTaskController extends BaseController
             $datesInterval = $this->intervalBreaks($input['amount'], $spreadDays);
         }
 
+        if ($input['app_bundle']) {
+            $input['developer_name'] = $this->getGoogleDeveloperName($input['app_bundle']) ?? '';
+        }
+
         for ($i = 0; $i < $input['amount']; $i++) {
             $input['proxy_id'] = 0;
+            $input['status'] = 'created';
 
             if ($input['country'] == 'any') {
                 $input['country'] = $accounts[$i]['country'];
             }
 
-            $input['status'] = 'created';
             if ($i >= $units_count) {
                 $input['status'] = 'pending';
                 $input['account_id'] = 0;
@@ -477,17 +562,21 @@ class TestTaskController extends BaseController
                 $input['status'] = 'pending';
             }
 
-            if ($input['status'] == 'created') {
-                $proxy = TestProxy::where('active', 1)->where('country', $input['country'])->inRandomOrder()->first(['id']);
+            // if ($input['status'] == 'created') {
+            //     $proxy = TestProxy::where('active', 1)->where('country', $input['country'])->inRandomOrder()->first(['id']);
 
-                if ($proxy) {
-                    $input['proxy_id'] = $proxy->id;
-                    TestProxy::where('id', $input['proxy_id'])->update(['active' => 0]);
-                } else {
-                    $input['status'] = 'pending';
-                    $input['proxy_id'] = 0;
-                }
-            }
+            //     if ($proxy) {
+            //         $input['proxy_id'] = $proxy->id;
+            //         TestProxy::where('id', $input['proxy_id'])->update(['active' => 0]);
+            //         echo 'Free proxy section: ' . $input['proxy_id'] . ' sets status 0. ~~ ';
+            //     } else {
+            //         $proxy = TestProxy::where('active', 0)->where('country', $input['country'])->inRandomOrder()->first(['id']);
+            //         $input['proxy_id'] = $proxy->id;
+            //         echo 'Busy proxy section: ' . $input['proxy_id'] . ' sets status 0. ~~ ';
+            //         // $input['status'] = 'pending';
+            //         // $input['proxy_id'] = 0;
+            //     }
+            // }
 
             $task = TestTask::create($input);
 
@@ -711,44 +800,51 @@ class TestTaskController extends BaseController
                 $status = ($time_diff >= 0) ? 'delayed' : $status;
             }
 
-            if ($status == 'created') {
-                $proxy = TestProxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
-                if (!$proxy) {
-                    $message = 'There is no proxy... exit';
-                    echo $message . PHP_EOL;
+            // if ($status == 'created' && $task->proxy_id == 0) {
+            //     $proxy = TestProxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
+            //     if (!$proxy) {
+            //         $message = 'There is no free proxy... trying busy...';
+            //         echo $message . PHP_EOL;
 
-                    return;
-                }
+            //         $proxy = TestProxy::where('active', 0)->where('country', $task->country)->inRandomOrder()->first(['id']);
 
-                $proxy_id = $proxy->id;
-                TestProxy::where('id', $proxy_id)->update(['active' => 0]);
+            //         // if ($task->proxy_id != 0) {
+            //         //     TestProxy::where('id', $task->proxy_id)->update(['active' => 1]);
+            //         // }
 
-                $message = 'Proxy: ' . $proxy_id;
-                echo $message . PHP_EOL;
-            }
+            //         // return;
+            //     }
+
+            //     $task->proxy_id = $proxy->id;
+            //     TestProxy::where('id', $task->proxy_id)->update(['active' => 0]);
+
+            //     $message = 'Proxy: ' . $task->proxy_id;
+            //     echo $message . PHP_EOL;
+            // }
 
             //TODO: tasks array
-            $insertArray[] = [
-                'id' => $task->id,
-                'unit_id' => $task->unit_id,
-                'account_id' => $accounts->id,
-                'status' => $status,
-                'proxy_id' => $proxy_id,
-            ];
-            // TestTask::where('id', $task->id)->update([
+            // $insertArray[] = [
+            //     'id' => $task->id,
             //     'unit_id' => $task->unit_id,
             //     'account_id' => $accounts->id,
-            //     'status' => 'created',
-            // ]);
+            //     'status' => $status,
+            //     'proxy_id' => $proxy_id,
+            // ];
+            TestTask::where('id', $task->id)->update([
+                'unit_id' => $task->unit_id,
+                'account_id' => $accounts->id,
+                'status' => 'created',
+                // 'proxy_id' => $task->proxy_id,
+            ]);
         }
 
-        if (isset($insertArray)) {
-            $chunks = array_chunk($insertArray, 5);
-            foreach ($chunks as $item) {
-                TestTask::upsert($item, uniqueBy: ['id'], update: ['unit_id', 'account_id', 'status', 'proxy_id']);
-            }
-            unset($chunks, $insertArray);
-        }
+        // if (isset($insertArray)) {
+        //     $chunks = array_chunk($insertArray, 5);
+        //     foreach ($chunks as $item) {
+        //         TestTask::upsert($item, uniqueBy: ['id'], update: ['unit_id', 'account_id', 'status', 'proxy_id']);
+        //     }
+        //     unset($chunks, $insertArray);
+        // }
     }
 
     private function retentionPendingTasks()
@@ -992,41 +1088,42 @@ class TestTaskController extends BaseController
                 $task->unit_id =  $accounts->unit_id;
             }
 
-            $proxy = TestProxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
-            if (!$proxy) {
-                $message = 'There is no proxy... exit';
-                echo $message . PHP_EOL;
+            // $proxy = TestProxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
+            // // $proxy = null; // TODO: test
+            // if (!$proxy) {
+            //     $message = 'There is no free proxy... trying busy...';
+            //     echo $message . PHP_EOL;
+            //     $proxy = TestProxy::where('active', 0)->where('country', $task->country)->inRandomOrder()->first(['id']);
+            // }
+            // $proxy_id = $proxy->id;
+            // TestProxy::where('id', $proxy_id)->update(['active' => 0]);
 
-                return;
-            }
-            $proxy_id = $proxy->id;
-            TestProxy::where('id', $proxy_id)->update(['active' => 0]);
-
-            $message = 'Proxy: ' . $proxy_id;
-            echo $message . PHP_EOL;
+            // $message = 'Proxy: ' . $proxy_id;
+            // echo $message . PHP_EOL;
 
             //TODO: tasks array
-            $insertArray[] = [
-                'id' => $task->id,
-                'unit_id' => $task->unit_id,
-                'account_id' => $accounts->id,
-                'status' => 'created',
-                'proxy_id' => $proxy_id,
-            ];
-            // TestTask::where('id', $task->id)->update([
+            // $insertArray[] = [
+            //     'id' => $task->id,
             //     'unit_id' => $task->unit_id,
             //     'account_id' => $accounts->id,
             //     'status' => 'created',
-            // ]);
+            //     'proxy_id' => $proxy_id,
+            // ];
+            TestTask::where('id', $task->id)->update([
+                'unit_id' => $task->unit_id,
+                'account_id' => $accounts->id,
+                'status' => 'created',
+                // 'proxy_id' => $proxy_id,
+            ]);
         }
 
-        if (isset($insertArray)) {
-            $chunks = array_chunk($insertArray, 5);
-            foreach ($chunks as $item) {
-                TestTask::upsert($item, uniqueBy: ['id'], update: ['unit_id', 'account_id', 'status', 'proxy_id']);
-            }
-            unset($chunks, $insertArray);
-        }
+        // if (isset($insertArray)) {
+        //     $chunks = array_chunk($insertArray, 5);
+        //     foreach ($chunks as $item) {
+        //         TestTask::upsert($item, uniqueBy: ['id'], update: ['unit_id', 'account_id', 'status', 'proxy_id']);
+        //     }
+        //     unset($chunks, $insertArray);
+        // }
     }
 
     private function retentionDelayedTasks()
@@ -1170,5 +1267,107 @@ class TestTaskController extends BaseController
             unset($launchTasksArray2);
         }
         */
+    }
+
+    public function FrozenJob()
+    {
+        $tasks = TestTask::where('status', 'created')->where('updated_at', '<=', DB::raw('(NOW() - INTERVAL 15 MINUTE)'))->get(['id', 'unit_id', 'country', 'type']);
+
+        if ($tasks->count() > 0) {
+            foreach ($tasks as $task) {
+                switch ($task->type) {
+                    case 'install':
+                    case 'launch':
+                    case 'uninstall':
+                        // $usedAccounts = Task::where('type', $task->type)->where('app_bundle', $task->app_bundle)->get(['account_id']);
+                        $accountType = 'google';
+                        break;
+                    case 'youtube':
+                        // $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
+                        $accountType = 'google';
+                        break;
+                    case 'import_chrome_cookies':
+                    case 'export_chrome_cookies':
+                        // $usedAccounts = [];
+                        $accountType = 'google';
+                        break;
+
+                    case 'tiktok':
+                        // $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
+                        $accountType = 'tiktok';
+                        break;
+                }
+                // Берем юнит из таблицы Accounts у которых есть связка, т.е. unit_id != 0
+                $accounts = TestAccount::whereNot('unit_id', 0)->whereNot('unit_id', $task->unit_id)->where('country', $task->country)->whereNot('blocked', 1)->where('type', $accountType)->inRandomOrder()->limit(1)->get();
+                if ($accounts->count() > 0) {
+                    $unitId = $accounts[0]['unit_id'];
+
+                    // Назначаем этот юнит на таску
+                    TestTask::where('id', $task->id)->update(['unit_id' => $unitId, 'status' => 'created']);
+
+                    info('Task: ' . $task->id . ', old unit_id: ' . $task->unit_id . ', new unit_id: ' . $unitId);
+                } else {
+                    info('Task: ' . $task->id . '. No free units for task.');
+                }
+
+                // echo $task->unit_id . PHP_EOL;
+            }
+        } else {
+            info('No tasks with outdated units.');
+        }
+    }
+
+    public function RunningJob()
+    {
+        $tasks = TestTask::where('status', 'running')->where('type', 'install')->get(['id', 'unit_id', 'country', 'type', 'retention_bundle_id']);
+        if ($tasks->count() > 0) {
+            foreach ($tasks as $task) {
+                switch ($task->type) {
+                    case 'install':
+                        // $usedAccounts = Task::where('type', $task->type)->where('app_bundle', $task->app_bundle)->get(['account_id']);
+                        $accountType = 'google';
+                        break;
+                    case 'youtube':
+                        // $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
+                        $accountType = 'google';
+                        break;
+                    case 'import_chrome_cookies':
+                    case 'export_chrome_cookies':
+                        // $usedAccounts = [];
+                        $accountType = 'google';
+                        break;
+
+                    case 'tiktok':
+                        // $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
+                        $accountType = 'tiktok';
+                        break;
+                }
+
+                $request = new Request;
+                $request_objects = $request->replace(['task_id' => $task->id, 'status' => 'failed', 'error' => ['type' => 'HANGING_TASKS', 'comment' => 'hanging running task']]);
+                $unit_id = $task->unit_id;
+                $response = $this->update($request_objects, $unit_id);
+                info('Task: ' . $response->getData()->data->task->id . ', type: ' . $response->getData()->data->task->type . ', status: ' . $response->getData()->data->task->status);
+                echo 'Task: ' . $response->getData()->data->task->id . ', type: ' . $response->getData()->data->task->type . ', status: ' . $task->status . ' # ' . $response->getData()->data->task->status . PHP_EOL;
+            }
+        } else {
+            info('No install tasks with outdated units.');
+            echo 'No install tasks with outdated units.';
+        }
+    }
+
+    private function getGoogleDeveloperName($bundle)
+    {
+        $response = Http::get('https://play.google.com/store/apps/details?id=' . $bundle);
+        $status = $response->status();
+
+        if ($status == 200) {
+            $str = $response->body();
+            preg_match('/{"@type":"Person","name":"(.*?)"+/', $str, $matches);
+
+            return $matches[1];
+        }
+
+        return false;
     }
 }

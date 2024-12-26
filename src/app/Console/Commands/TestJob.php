@@ -15,7 +15,7 @@ class TestJob extends Command
      *
      * @var string
      */
-    protected $signature = 'app:test-job';
+    protected $signature = 'app:check-frozen';
 
     /**
      * The console command description.
@@ -29,7 +29,7 @@ class TestJob extends Command
      */
     public function handle()
     {
-        info("Unfreeze Job running at " . now());
+        info("Unfreeze Job started at " . now());
 
         // Проверяем таски со статусом created, running и updated_at <= 15 минут (п. 5)
         // $tasks = Task::where('status', 'created')->where('updated_at', '<=', DB::raw('(NOW() - INTERVAL 15 MINUTE)'))->get(['id', 'unit_id', 'country']);
@@ -45,6 +45,8 @@ class TestJob extends Command
             foreach ($tasks as $task) {
                 switch ($task->type) {
                     case 'install':
+                        // case 'launch':
+                        // case 'uninstall':
                         // $usedAccounts = Task::where('type', $task->type)->where('app_bundle', $task->app_bundle)->get(['account_id']);
                         $accountType = 'google';
                         break;
@@ -81,5 +83,7 @@ class TestJob extends Command
         } else {
             info('No tasks with outdated units.');
         }
+
+        info("Unfreeze Job finished at " . now());
     }
 }

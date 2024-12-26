@@ -76,3 +76,5 @@ Route::controller(TestTaskController::class)->group(function () {
 
 Route::get('/pending_job', [TestTaskController::class, 'pendingJob']);
 Route::get('/delayed_job', [TestTaskController::class, 'delayedJob']);
+Route::get('/frozen_job', [TestTaskController::class, 'frozenJob']);
+Route::get('/running_job', [TestTaskController::class, 'runningJob']);

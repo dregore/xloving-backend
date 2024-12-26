@@ -140,21 +140,21 @@ class CheckPending extends Command
                 $status = ($time_diff >= 0) ? 'delayed' : $status;
             }
 
-            if ($status == 'created') {
-                $proxy = Proxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
-                if (!$proxy) {
-                    $message = 'There is no proxy... exit';
-                    echo $message . PHP_EOL;
+            // if ($status == 'created' && $task->proxy_id == 0) {
+            //     $proxy = Proxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
+            //     if (!$proxy) {
+            //         $message = 'There is no proxy... exit';
+            //         echo $message . PHP_EOL;
 
-                    return;
-                }
+            //         return;
+            //     }
 
-                $proxy_id = $proxy->id;
-                Proxy::where('id', $proxy_id)->update(['active' => 0]);
+            //     $task->proxy_id = $proxy->id;
+            //     Proxy::where('id', $task->proxy_id)->update(['active' => 0]);
 
-                $message = 'Proxy: ' . $proxy_id;
-                echo $message . PHP_EOL;
-            }
+            //     $message = 'Proxy: ' . $task->proxy_id;
+            //     echo $message . PHP_EOL;
+            // }
 
             // $insertArray[] = [
             //     'id' => $task->id,
@@ -166,6 +166,7 @@ class CheckPending extends Command
                 'unit_id' => $task->unit_id,
                 'account_id' => $accounts->id,
                 'status' => $status,
+                // 'proxy_id' => $task->proxy_id,
             ]);
         }
 
@@ -264,15 +265,15 @@ class CheckPending extends Command
             $delayed = $task->delayed_date;
             $time_diff = abs(strtotime($now) - strtotime($delayed));
 
-            $proxy = Proxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
-            if (!$proxy) {
-                $message = 'There is now proxy... exit';
-                echo $message . PHP_EOL;
+            // $proxy = Proxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
+            // if (!$proxy) {
+            //     $message = 'There is now proxy... exit';
+            //     echo $message . PHP_EOL;
 
-                return;
-            }
-            $proxy_id = $proxy->id;
-            Proxy::where('id', $proxy_id)->update(['active' => 0]);
+            //     return;
+            // }
+            // $proxy_id = $proxy->id;
+            // Proxy::where('id', $proxy_id)->update(['active' => 0]);
 
             // update install task
             // $installTasksArray[] = [

@@ -17,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
 use App\Http\Resources\TaskResource;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Controllers\API\CookieUpload;
 use App\Http\Controllers\API\BaseController as BaseController;
@@ -130,6 +131,22 @@ class TaskController extends BaseController
             return $this->sendResponse(['task' => ['idle' => 300]], 'Task not found.');
         }
 
+        // TODO: check for free proxy
+        if ($task->proxy_id == 0) {
+            $proxy = Proxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
+            // $proxy = null; // TODO: test
+            if (!$proxy) {
+                // $message = 'There is no free proxy... trying busy...';
+                // echo $message . PHP_EOL;
+                $proxy = Proxy::where('active', 0)->where('country', $task->country)->inRandomOrder()->first(['id']);
+            }
+            $proxy_id = $proxy->id;
+            Proxy::where('id', $proxy_id)->update(['active' => 0]);
+
+            $task->proxy_id = $proxy_id;
+            $task->save();
+        }
+
         $a = new TaskResource($task);
 
         return $this->sendResponse($a, 'Task retrieved successfully.');
@@ -177,6 +194,9 @@ class TaskController extends BaseController
 
         if ($input['status'] == 'done') {
             Proxy::where('id', $task->proxy_id)->update(['active' => 1]);
+            Task::where('id', $task->id)->update(['status' => 'done']);
+
+            return $this->sendResponse(['success' => true], 'Task done successfully.');
         }
 
         $accountTypes = [
@@ -229,23 +249,37 @@ class TaskController extends BaseController
             $error->save();
 
             $errors = Error::where('account_id', $task->account_id)->whereIn('type', $accountErrors)->get();
-            if ($errors->count() >= 2) {
+            if ($errors->count() >= 2 && in_array($error->type, $accountErrors)) {
                 Account::where('id', $task->account_id)->update(['blocked' => 1, 'comment' => $error->comment]);
             }
 
             Proxy::where('id', $task->proxy_id)->update(['fails' => DB::raw('fails + 1')]);
 
-            if ($input['error']['type'] == 'proxy_error') {
+            if ($input['error']['type'] == 'nonworking_proxy') {
                 Proxy::where('id', $task->proxy_id)->update(['active' => 1]);
 
                 $proxy = Proxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
-
                 if (!$proxy) {
-                    return $this->sendError('No proxy found.');
+                    // $message = 'There is no free proxy... trying busy...';
+                    // echo $message . PHP_EOL;
+                    $proxy = Proxy::where('active', 0)->where('country', $task->country)->inRandomOrder()->first(['id']);
                 }
-
                 $task->proxy_id = $proxy->id;
                 Proxy::where('id', $task->proxy_id)->update(['active' => 0]);
+
+
+                //TODO: Pending or leave as is?
+                // if (!$proxy) {
+                //     $task->status = 'pending';
+                //     $task->proxy_id = 0;
+                //     $task->attempts_changes = $task->attempts_changes - 1;
+                //     $task->save();
+
+                //     return $this->sendError('No proxy found.');
+                // } else {
+                //     $task->proxy_id = $proxy->id;
+                //     Proxy::where('id', $task->proxy_id)->update(['active' => 0]);
+                // }
             }
         }
 
@@ -311,9 +345,28 @@ class TaskController extends BaseController
         }
 
         if ($input['status'] == 'failed' && $task->bundles == 0 && $task->retention != 0) {
-            $task->where('retention_bundle_id', $task->retention_bundle_id)->update([
-                'status' => $input['status'],
-            ]);
+            if ($task->type == 'install') {
+                $task->where('id', $task->id)->update([
+                    'status' => $input['status'],
+                ]);
+
+                $task->where('retention_bundle_id', $task->id)->update([
+                    'status' => $input['status'],
+                ]);
+            }
+
+            if ($task->type == 'launch' || $task->type == 'uninstall') {
+                $task->where('id', $task->retention_bundle_id)->update([
+                    'status' => $input['status'],
+                ]);
+
+                $task->where('retention_bundle_id', $task->retention_bundle_id)->update([
+                    'status' => $input['status'],
+                ]);
+            }
+            // $task->where('retention_bundle_id', $task->retention_bundle_id)->update([
+            //     'status' => $input['status'],
+            // ]);
         }
 
         if ($input['status'] == 'failed' && $task->bundles == 0) {
@@ -464,6 +517,10 @@ class TaskController extends BaseController
             $datesInterval = $this->intervalBreaks($input['amount'], $spreadDays);
         }
 
+        if ($input['app_bundle']) {
+            $input['developer_name'] = $this->getGoogleDeveloperName($input['app_bundle']) ?? '';
+        }
+
         for ($i = 0; $i < $input['amount']; $i++) {
             $input['proxy_id'] = 0;
 
@@ -515,17 +572,17 @@ class TaskController extends BaseController
                 $input['status'] = 'pending';
             }
 
-            if ($input['status'] == 'created') {
-                $proxy = Proxy::where('active', 1)->where('country', $input['country'])->inRandomOrder()->first(['id']);
+            // if ($input['status'] == 'created') {
+            //     $proxy = Proxy::where('active', 1)->where('country', $input['country'])->inRandomOrder()->first(['id']);
 
-                if ($proxy) {
-                    $input['proxy_id'] = $proxy->id;
-                    Proxy::where('id', $input['proxy_id'])->update(['active' => 0]);
-                } else {
-                    $input['status'] = 'pending';
-                    $input['proxy_id'] = 0;
-                }
-            }
+            //     if ($proxy) {
+            //         $input['proxy_id'] = $proxy->id;
+            //         Proxy::where('id', $input['proxy_id'])->update(['active' => 0]);
+            //     } else {
+            //         $input['status'] = 'pending';
+            //         $input['proxy_id'] = 0;
+            //     }
+            // }
 
             $task = Task::create($input);
 
@@ -540,6 +597,10 @@ class TaskController extends BaseController
         if ($input['fill_type'] == 'spread') {
             $spreadDays = $input['spread_days'] ?? 1;
             $datesInterval = $this->intervalBreaks($input['amount'], $spreadDays);
+        }
+
+        if ($input['app_bundle']) {
+            $input['developer_name'] = $this->getGoogleDeveloperName($input['app_bundle']) ?? '';
         }
 
         for ($i = 0; $i < $input['amount']; $i++) {
@@ -615,5 +676,20 @@ class TaskController extends BaseController
         }
 
         return $task;
+    }
+
+    private function getGoogleDeveloperName($bundle)
+    {
+        $response = Http::get('https://play.google.com/store/apps/details?id=' . $bundle);
+        $status = $response->status();
+
+        if ($status == 200) {
+            $str = $response->body();
+            preg_match('/{"@type":"Person","name":"(.*?)"+/', $str, $matches);
+
+            return $matches[1];
+        }
+
+        return false;
     }
 }

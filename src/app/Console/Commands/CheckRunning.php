@@ -39,39 +39,39 @@ class CheckRunning extends Command
      */
     public function handle()
     {
-        info("Check running install Job running at " . now());
+        info("[Running] Check running install Job running at " . now());
 
         // Проверяем таски install со статусом running <= 15 минут (п. 7)
-        $tasks = Task::where('status', 'running')->where('type', 'install')->where('updated_at', '<=', DB::raw('(NOW() - INTERVAL 15 MINUTE)'))->get(['id', 'unit_id', 'country', 'type']);
+        $tasks = Task::where('status', 'running')->where('type', 'install')->where('updated_at', '<=', DB::raw('(NOW() - INTERVAL 15 MINUTE)'))->get(['id', 'unit_id', 'country', 'type', 'retention_bundle_id']);
 
         if ($tasks->count() > 0) {
             foreach ($tasks as $task) {
-                switch ($task->type) {
-                    case 'install':
-                        // $usedAccounts = Task::where('type', $task->type)->where('app_bundle', $task->app_bundle)->get(['account_id']);
-                        $accountType = 'google';
-                        break;
-                    case 'youtube':
-                        // $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
-                        $accountType = 'google';
-                        break;
-                    case 'import_chrome_cookies':
-                    case 'export_chrome_cookies':
-                        // $usedAccounts = [];
-                        $accountType = 'google';
-                        break;
+                // switch ($task->type) {
+                //     case 'install':
+                //         // $usedAccounts = Task::where('type', $task->type)->where('app_bundle', $task->app_bundle)->get(['account_id']);
+                //         $accountType = 'google';
+                //         break;
+                //     case 'youtube':
+                //         // $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
+                //         $accountType = 'google';
+                //         break;
+                //     case 'import_chrome_cookies':
+                //     case 'export_chrome_cookies':
+                //         // $usedAccounts = [];
+                //         $accountType = 'google';
+                //         break;
 
-                    case 'tiktok':
-                        // $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
-                        $accountType = 'tiktok';
-                        break;
-                }
+                //     case 'tiktok':
+                //         // $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
+                //         $accountType = 'tiktok';
+                //         break;
+                // }
 
                 $request = new Request;
                 $request_objects = $request->replace(['task_id' => $task->id, 'status' => 'failed', 'error' => ['type' => 'HANGING_TASKS', 'comment' => 'hanging running task']]);
                 $unit_id = $task->unit_id;
                 $response = $this->taskController->update($request_objects, $unit_id);
-                info('Task: ' . $response->getData()->data->task->id . ', type: ' . $response->getData()->data->task->type . ', status: ' . $response->getData()->data->task->status);
+                info('[Running] Task: ' . $response->getData()->data->task->id . ', type: ' . $response->getData()->data->task->type . ', status: ' . $response->getData()->data->task->status);
 
                 /*
                 // Берем юнит из таблицы Accounts у которых есть связка, т.е. unit_id != 0
@@ -91,41 +91,41 @@ class CheckRunning extends Command
                 // echo $task->unit_id . PHP_EOL;
             }
         } else {
-            info('No install tasks with outdated units.');
+            info('[Running] No install tasks with outdated units.');
         }
 
-        info("Check running youtube Job running at " . now());
+        info("[Running] Check running youtube Job running at " . now());
         // Проверяем таски yoututbe со статусом running <= 15 минут (п. 7)
-        $tasks = Task::where('status', 'running')->where('type', 'youtube')->where('updated_at', '<=', DB::raw('(NOW() - INTERVAL (minutes*60+tasks.seconds+15) MINUTE)'))->get(['id', 'unit_id', 'country', 'type']);
+        $tasks = Task::where('status', 'running')->where('type', 'youtube')->where('updated_at', '<=', DB::raw('(NOW() - INTERVAL (minutes*60+seconds+15*60) SECOND)'))->get(['id', 'unit_id', 'country', 'type']);
 
         if ($tasks->count() > 0) {
             foreach ($tasks as $task) {
-                switch ($task->type) {
-                    case 'install':
-                        // $usedAccounts = Task::where('type', $task->type)->where('app_bundle', $task->app_bundle)->get(['account_id']);
-                        $accountType = 'google';
-                        break;
-                    case 'youtube':
-                        // $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
-                        $accountType = 'google';
-                        break;
-                    case 'import_chrome_cookies':
-                    case 'export_chrome_cookies':
-                        // $usedAccounts = [];
-                        $accountType = 'google';
-                        break;
+                // switch ($task->type) {
+                //     case 'install':
+                //         // $usedAccounts = Task::where('type', $task->type)->where('app_bundle', $task->app_bundle)->get(['account_id']);
+                //         $accountType = 'google';
+                //         break;
+                //     case 'youtube':
+                //         // $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
+                //         $accountType = 'google';
+                //         break;
+                //     case 'import_chrome_cookies':
+                //     case 'export_chrome_cookies':
+                //         // $usedAccounts = [];
+                //         $accountType = 'google';
+                //         break;
 
-                    case 'tiktok':
-                        // $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
-                        $accountType = 'tiktok';
-                        break;
-                }
+                //     case 'tiktok':
+                //         // $usedAccounts = Task::where('type', $task->type)->where('url', $task->url)->get(['account_id']);
+                //         $accountType = 'tiktok';
+                //         break;
+                // }
 
                 $request = new Request;
                 $request_objects = $request->replace(['task_id' => $task->id, 'status' => 'failed', 'error' => ['type' => 'HANGING_TASKS', 'comment' => 'hanging running task']]);
                 $unit_id = $task->unit_id;
                 $response = $this->taskController->update($request_objects, $unit_id);
-                info('Task: ' . $response->getData()->data->task->id . ', type: ' . $response->getData()->data->task->type . ', status: ' . $response->getData()->data->task->status);
+                info('[Running] Task: ' . $response->getData()->data->task->id . ', type: ' . $response->getData()->data->task->type . ', status: ' . $response->getData()->data->task->status);
 
                 /*
                 // Берем юнит из таблицы Accounts у которых есть связка, т.е. unit_id != 0
@@ -145,7 +145,7 @@ class CheckRunning extends Command
                 // echo $task->unit_id . PHP_EOL;
             }
         } else {
-            info('No youtube tasks with outdated units.');
+            info('[Running] No youtube tasks with outdated units.');
         }
     }
 }

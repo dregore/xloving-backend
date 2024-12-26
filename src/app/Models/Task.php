@@ -59,5 +59,6 @@ class Task extends Model
         'scroll_duration',
         'retention_bundle_id',
         'proxy_id',
+        'app_company',
     ];
 }

@@ -59,5 +59,6 @@ class TestTask extends Model
         'scroll_duration',
         'retention_bundle_id',
         'proxy_id',
+        'developer_name',
     ];
 }

@@ -19,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use App\Http\Resources\UnitResource;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Http;
 use App\Http\Controllers\API\BaseController as BaseController;
 
 class TestController extends BaseController
@@ -209,9 +210,23 @@ class TestController extends BaseController
     {
         echo '<pre>';
 
-        $input['country'] = 'us';
-        $proxy = Proxy::where('active', 1)->where('country', $input['country'])->inRandomOrder()->first(['id']);
-        echo $proxy->id . PHP_EOL;
+        $response = Http::get('https://play.google.com/store/apps/details?id=com.LinkedSquad.SchoolBoyRunaway');
+        $status = $response->status();
+        echo $status . PHP_EOL;
+
+        if ($status == 200) {
+            $str = $response->body();
+            preg_match('/{"@type":"Person","name":"(.*?)"+/', $str, $matches);
+            print_r($matches);
+        }
+
+        // DB::enableQueryLog(); //Enable query logging
+        // $input['country'] = 'us';
+        // $proxy = Proxy::where('active', 1)->where('country', $input['country'])->inRandomOrder()->first(['id']);
+        // $proxy_id = $proxy->id;
+        // echo $proxy_id . PHP_EOL;
+        // Proxy::where('id', $proxy_id)->update(['active' => 0]);
+        // dd(DB::getQueryLog()); //print the SQl query
 
         // $input['app_bundle'] = 'com.littlebitgames.idleevolution';
         // $input['unit_id'] = 28;

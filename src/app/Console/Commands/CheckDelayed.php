@@ -17,7 +17,7 @@ class CheckDelayed extends Command
      *
      * @var string
      */
-    protected $signature = 'app:delayed-job';
+    protected $signature = 'app:check-delayed';
 
     /**
      * The console command description.
@@ -39,6 +39,7 @@ class CheckDelayed extends Command
         if ($units->count() == 0) {
             $message = 'There is no live units... exit';
             echo $message . PHP_EOL;
+            info($message);
 
             return;
         }
@@ -71,14 +72,16 @@ class CheckDelayed extends Command
 
     private function otherDelayedTasks($units)
     {
-        $message = 'Check delayed tasks without retention';
+        $message = 'Check delayed tasks without retention started at ' . now();
         echo $message . PHP_EOL;
+        info($message);
         $tasks = Task::where('status', 'delayed')->where(DB::raw("DATE_FORMAT(delayed_date, '%Y-%m-%d %H:%i')"), '<=', date('Y-m-d H:i'))->where('retention', 0)->orderBy('id', 'desc')->get();
         echo $tasks->count() . PHP_EOL;
 
         if ($tasks->count() == 0) {
             $message = 'There is no delayed tasks... exit';
             echo $message . PHP_EOL;
+            info($message);
 
             return;
         }
@@ -90,10 +93,11 @@ class CheckDelayed extends Command
         foreach ($tasks as $task) {
             $message = 'task id: ' . $task->id;
             echo $message . PHP_EOL;
+            info($message);
 
             $proxy_id = 0;
 
-            $usedAccounts = Task::where('type', $task->type)->where('app_bundle', $task->app_bundle)->get(['account_id']);
+            $usedAccounts = Task::where('type', $task->type)->whereNot('status', 'delayed')->where('app_bundle', $task->app_bundle)->get(['account_id']);
             $accountType = 'google';
 
             if ($task->country == 'any') {
@@ -104,42 +108,49 @@ class CheckDelayed extends Command
                 // dd(DB::getQueryLog()); //print the SQl query
             }
 
-            if (!$accounts) {
+            if (!$accounts && $task->account_id == 0) {
                 $message = 'There is no accounts... exit';
                 echo $message . PHP_EOL;
+                info($message);
 
                 return;
             }
 
             $task->country = ($task->country == 'any') ? $accounts->country : $task->country;
 
-            if ($accounts->unit_id == 0) {
-                $task->unit_id = $b->current();
-                $b->next();
+            if ($accounts) {
+                if ($accounts->unit_id == 0) {
+                    $task->unit_id = $b->current();
+                    $b->next();
 
-                $message = 'New unit id: ' . $task->unit_id;
-                echo $message . PHP_EOL;
-                // info($message);
-                // Account::where('id', $accounts->id)->update(['unit_id' => $task->unit_id]);
-            } else {
-                $message = 'Old unit id: ' . $accounts->unit_id;
-                echo $message . PHP_EOL;
-                // info($message);
-                $task->unit_id =  $accounts->unit_id;
+                    $message = 'New unit id: ' . $task->unit_id;
+                    echo $message . PHP_EOL;
+                    info($message);
+                    // info($message);
+                    // Account::where('id', $accounts->id)->update(['unit_id' => $task->unit_id]);
+                } else {
+                    $message = 'Old unit id: ' . $accounts->unit_id;
+                    echo $message . PHP_EOL;
+                    info($message);
+                    // info($message);
+                    $task->unit_id =  $accounts->unit_id;
+                }
             }
 
-            $proxy = Proxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
-            if (!$proxy) {
-                $message = 'There is no proxy... exit';
-                echo $message . PHP_EOL;
+            // $proxy = Proxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
+            // if (!$proxy) {
+            //     $message = 'There is no proxy... exit';
+            //     echo $message . PHP_EOL;
+            //     info($message);
 
-                return;
-            }
-            $proxy_id = $proxy->id;
-            Proxy::where('id', $proxy_id)->update(['active' => 0]);
+            //     return;
+            // }
+            // $proxy_id = $proxy->id;
+            // Proxy::where('id', $proxy_id)->update(['active' => 0]);
 
-            $message = 'Proxy: ' . $proxy_id;
-            echo $message . PHP_EOL;
+            // $message = 'Proxy: ' . $proxy_id;
+            // echo $message . PHP_EOL;
+            // info($message);
 
             //TODO: tasks array
             // $insertArray[] = [
@@ -151,8 +162,9 @@ class CheckDelayed extends Command
             // ];
             Task::where('id', $task->id)->update([
                 'unit_id' => $task->unit_id,
-                'account_id' => $accounts->id,
+                'account_id' => (!$accounts) ? $task->account_id : $accounts->id,
                 'status' => 'created',
+                // 'proxy_id' => $proxy_id,
             ]);
         }
 
@@ -163,24 +175,31 @@ class CheckDelayed extends Command
         //     }
         //     unset($chunks, $insertArray);
         // }
+
+        $message = 'Check delayed tasks without retention finished at ' . now();
+        echo $message . PHP_EOL;
+        info($message);
     }
 
     private function retentionDelayedTasks()
     {
-        $message = 'Check delayed tasks with retention';
+        $message = 'Check delayed tasks with retention started at ' . now();
         echo $message . PHP_EOL;
+        info($message);
         $tasks = Task::where('status', 'delayed')->where(DB::raw("DATE_FORMAT(delayed_date, '%Y-%m-%d %H:%i')"), '<=', date('Y-m-d H:i'))->whereNot('retention', 0)->orderBy('id', 'desc')->get();
         echo $tasks->count() . PHP_EOL;
 
         if ($tasks->count() == 0) {
             $message = 'There is no delayed tasks with retention... exit';
             echo $message . PHP_EOL;
+            info($message);
 
             return;
         }
 
         foreach ($tasks as $task) {
             $message = 'task id: ' . $task->id;
+            info($message);
             // echo $message . PHP_EOL;
 
             $proxy_id = 0;
@@ -233,15 +252,15 @@ class CheckDelayed extends Command
             $delayed = $task->delayed_date;
             $time_diff = abs(strtotime($now) - strtotime($delayed));
 
-            $proxy = Proxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
-            if (!$proxy) {
-                $message = 'There is now proxy... exit';
-                echo $message . PHP_EOL;
+            // $proxy = Proxy::where('active', 1)->where('country', $task->country)->inRandomOrder()->first(['id']);
+            // if (!$proxy) {
+            //     $message = 'There is now proxy... exit';
+            //     echo $message . PHP_EOL;
 
-                return;
-            }
-            $proxy_id = $proxy->id;
-            Proxy::where('id', $proxy_id)->update(['active' => 0]);
+            //     return;
+            // }
+            // $proxy_id = $proxy->id;
+            // Proxy::where('id', $proxy_id)->update(['active' => 0]);
 
             // update install task
             //TODO: install tasks array
@@ -259,6 +278,7 @@ class CheckDelayed extends Command
             Task::where('id', $task->id)->update([
                 'status' => $status,
                 'delayed_date' => date('Y-m-d H:i:s'),
+                // 'proxy_id' => $proxy_id,
             ]);
 
             // update launch, uninstall task
@@ -293,6 +313,10 @@ class CheckDelayed extends Command
             unset($launchTasksArray2);
         }
         */
+
+        $message = 'Check delayed tasks with retention finished at ' . now();
+        echo $message . PHP_EOL;
+        info($message);
     }
 
     /**
