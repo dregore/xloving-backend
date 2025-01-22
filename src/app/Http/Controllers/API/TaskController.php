@@ -9,13 +9,14 @@ use App\Models\Unit;
 use App\Models\Error;
 
 use App\Models\Proxy;
+use App\Models\Review;
 use App\Models\Account;
-use Illuminate\Http\Request;
 
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
 
+use Illuminate\Support\Facades\DB;
 use App\Http\Resources\TaskResource;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
@@ -80,6 +81,17 @@ class TaskController extends BaseController
         //     $cookie = new CookieUpload;
         //     $input['filename'] = $cookie->justUpload($request);
         // }
+
+        // review
+        if (isset($input['review']) && $input['review'] == 1) {
+            $reviewNumber = floor(($input['amount'] * $input['review_amount']) / 100);
+            $i1 = array_fill(0, $input['amount'], 0);
+            $i2 = array_fill(0, $reviewNumber, 1); // NOTE: comes from frontend
+            $input['review_mask'] = array_replace($i1, $i2);
+            shuffle($input['review_mask']);
+            // $r = new \Random\Randomizer();
+            // $arr2 = $r->shuffleArray($arr2);
+        }
 
         // TODO: HARDCODED
         $input['attempts_changes'] = $input['attempts'];
@@ -518,7 +530,8 @@ class TaskController extends BaseController
         }
 
         if ($input['app_bundle']) {
-            $input['developer_name'] = $this->getGoogleDeveloperName($input['app_bundle']) ?? '';
+            $googlePage = $this->getGooglePage($input['app_bundle']);
+            $input['developer_name'] = $this->getGoogleDeveloperName($googlePage) ?? '';
         }
 
         for ($i = 0; $i < $input['amount']; $i++) {
@@ -586,6 +599,24 @@ class TaskController extends BaseController
 
             $task = Task::create($input);
 
+            // review
+            if (isset($input['review_mask']) && $input['review_mask'][$i] == 1) {
+                $input['google_title'] = $this->getGoogleAppTitle($googlePage) ?? '';
+                $input['google_description'] = $this->getGoogleAppDescription($googlePage) ?? '';
+                // generate review using chatGPT
+                $review_text = $this->chatGptReview($input);
+                $review_rate = $input['review_rate'];
+                // insert review into review table
+                Review::create([
+                    'text' => $review_text,
+                    'rate' => $review_rate,
+                    'task_id' => $task->id
+                ]);
+                // mark review field as 1 in task table
+                $task->review = 1;
+                $task->save();
+            }
+
             echo $i . ' -> INSTALL: unit_id: ' . $input['unit_id'] . ', account_id: ' . $input['account_id'] . ', status: ' . $input['status'] . PHP_EOL;
         }
 
@@ -597,6 +628,11 @@ class TaskController extends BaseController
         if ($input['fill_type'] == 'spread') {
             $spreadDays = $input['spread_days'] ?? 1;
             $datesInterval = $this->intervalBreaks($input['amount'], $spreadDays);
+        }
+
+        if ($input['app_bundle']) {
+            $googlePage = $this->getGooglePage($input['app_bundle']);
+            $input['developer_name'] = $this->getGoogleDeveloperName($googlePage) ?? '';
         }
 
         if ($input['app_bundle']) {
@@ -656,6 +692,24 @@ class TaskController extends BaseController
             $lastInsertedId = $task->id;
             $input['proxy_id'] = 0;
 
+            // review
+            if (isset($input['review_mask']) && $input['review_mask'][$i] == 1) {
+                $input['google_title'] = $this->getGoogleAppTitle($googlePage) ?? '';
+                $input['google_description'] = $this->getGoogleAppDescription($googlePage) ?? '';
+                // generate review using chatGPT
+                $review_text = $this->chatGptReview($input);
+                $review_rate = $input['review_rate'];
+                // insert review into review table
+                Review::create([
+                    'text' => $review_text,
+                    'rate' => $review_rate,
+                    'task_id' => $lastInsertedId
+                ]);
+                // mark review field as 1 in task table
+                $task->review = 1;
+                $task->save();
+            }
+
             $retentionArray = explode(',', $input['retention']);
             foreach ($retentionArray as $item) {
                 $input['type'] = 'launch';
@@ -678,16 +732,88 @@ class TaskController extends BaseController
         return $task;
     }
 
-    private function getGoogleDeveloperName($bundle)
+    private function getGooglePage($bundle)
     {
-        $response = Http::get('https://play.google.com/store/apps/details?id=' . $bundle);
+        $response = Http::get('https://play.google.com/store/apps/details?id=' . $bundle . '&hl=en');
         $status = $response->status();
 
         if ($status == 200) {
             $str = $response->body();
-            preg_match('/{"@type":"Person","name":"(.*?)"+/', $str, $matches);
+
+            return $str;
+        }
+
+        return false;
+    }
+
+    private function getGoogleDeveloperName($page)
+    {
+        if ($page) {
+            preg_match('/{"@type":"Person","name":"(.*?)"+/', $page, $matches);
 
             return $matches[1];
+        }
+
+        return false;
+    }
+
+    private function getGoogleAppTitle($page)
+    {
+        if ($page) {
+            preg_match('/"\@type":"SoftwareApplication","name":"(.*?)"/', $page, $matches);
+
+            return $matches[1];
+        }
+
+        return false;
+    }
+
+    private function getGoogleAppDescription($page)
+    {
+        if ($page) {
+            preg_match('/data-g-id="description">(.*?)<\/div>/', $page, $matches);
+
+            return $matches[1];
+        }
+
+        return false;
+    }
+
+    private function chatGptReview(array $input)
+    {
+        $token = 'env('OPENAI_API_KEY')';
+
+        $templateSearchTerm = 'Write a review for a game on Google Play. Use the following game title: [GAME TITLE] and the description: [GAME DESCRIPTION] in the review. The review must be at least 200 characters long and include the mandatory words/phrases: [GAME KEYWORD]. The tone of the review should be friendly and positive.';
+        $templateNoSearchTerm = 'Write a review for a game on Google Play. Use the following game title: [GAME TITLE] and the description: [GAME DESCRIPTION] in the review. The review must be at least 200 characters long. The tone of the review should be friendly and positive.';
+
+        $from = ['[GAME TITLE]', '[GAME DESCRIPTION]'];
+        $to = [$input['google_title'], $input['google_description']];
+
+        if (!isset($input['search_term'])) {
+            $template = str_replace($from, $to, $templateNoSearchTerm);
+        } else {
+            array_push($from, '[GAME KEYWORD]');
+            array_push($to, $input['search_term']);
+            $template = str_replace($from, $to, $templateSearchTerm);
+        }
+
+        $data = [
+            'model' => 'gpt-4o',
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => $template,
+                ],
+            ],
+        ];
+        $response = Http::withToken($token)->post('https://api.openai.com/v1/chat/completions', $data);
+        $status = $response->status();
+
+        if ($status == 200) {
+            $str = $response->body();
+            $array = json_decode($str);
+
+            return $array->choices[0]->message->content;
         }
 
         return false;
