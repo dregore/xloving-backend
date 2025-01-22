@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Iksaku\Laravel\MassUpdate\MassUpdatable;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Task extends Model
 {
@@ -61,4 +62,9 @@ class Task extends Model
         'proxy_id',
         'app_company',
     ];
+
+    public function reviewData(): HasOne
+    {
+        return $this->hasOne(Review::class);
+    }
 }
