@@ -210,6 +210,14 @@ class TestController extends BaseController
     {
         echo '<pre>';
 
+        DB::enableQueryLog(); //Enable query logging
+        $task = Task::find(102272);
+        $review = $task->reviewData;
+        echo $task;
+        echo PHP_EOL;
+        echo $review;
+        dd(DB::getQueryLog()); //print the SQl query
+        /*
         $response = Http::get('https://play.google.com/store/apps/details?id=com.LinkedSquad.SchoolBoyRunaway');
         $status = $response->status();
         echo $status . PHP_EOL;
@@ -219,6 +227,7 @@ class TestController extends BaseController
             preg_match('/{"@type":"Person","name":"(.*?)"+/', $str, $matches);
             print_r($matches);
         }
+        */
 
         // DB::enableQueryLog(); //Enable query logging
         // $input['country'] = 'us';
