@@ -531,7 +531,7 @@ class TaskController extends BaseController
 
         if ($input['app_bundle']) {
             $googlePage = $this->getGooglePage($input['app_bundle']);
-            $input['developer_name'] = $this->getGoogleDeveloperName($googlePage) ?? '';
+            $input['app_company'] = $this->getGoogleDeveloperName($googlePage) ?? '';
         }
 
         for ($i = 0; $i < $input['amount']; $i++) {
@@ -632,11 +632,7 @@ class TaskController extends BaseController
 
         if ($input['app_bundle']) {
             $googlePage = $this->getGooglePage($input['app_bundle']);
-            $input['developer_name'] = $this->getGoogleDeveloperName($googlePage) ?? '';
-        }
-
-        if ($input['app_bundle']) {
-            $input['developer_name'] = $this->getGoogleDeveloperName($input['app_bundle']) ?? '';
+            $input['app_company'] = $this->getGoogleDeveloperName($googlePage) ?? '';
         }
 
         for ($i = 0; $i < $input['amount']; $i++) {
