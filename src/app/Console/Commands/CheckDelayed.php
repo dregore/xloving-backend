@@ -113,6 +113,10 @@ class CheckDelayed extends Command
                 echo $message . PHP_EOL;
                 info($message);
 
+                Task::where('id', $task->id)->update([
+                    'status' => 'pending',
+                ]);
+
                 return;
             }
 
