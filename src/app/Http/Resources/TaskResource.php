@@ -55,7 +55,7 @@ class TaskResource extends JsonResource
                     'scroll_duration' => $this->scroll_duration,
                     'proxy_id' => $this->proxy_id,
                     'app_company' => $this->app_company,
-                    'review' => $this->review,
+                    'review' => (bool) $this->review,
                 ],
                 // 'account' => AccountsResource::collection(Accounts::all()),
                 // 'account' => new AccountResource(Account::where('type', 'google')->inRandomOrder()->first()),
